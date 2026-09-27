@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;" />
+  <title>App Center</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◧</span>
+      <div>
+        <h1>App Center</h1>
+        <p id="subtitle">Projeler taraniyor...</p>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <input id="search" type="search" placeholder="Proje ara..." autocomplete="off" />
+      <select id="filter-status" title="Duruma gore filtrele">
+        <option value="all">Tumu</option>
+        <option value="running">Calisanlar</option>
+        <option value="stopped">Duranlar</option>
+      </select>
+      <select id="filter-type" title="Tipe gore filtrele">
+        <option value="all">Tum tipler</option>
+      </select>
+      <label class="checkbox"><input type="checkbox" id="show-hidden" /> Gizliler</label>
+      <label class="checkbox" title="App Center, Windows oturumu acildiginda otomatik baslasin">
+        <input type="checkbox" id="launch-startup" /> Baslangicta ac
+      </label>
+      <button id="btn-scan" class="btn">Yeniden Tara</button>
+      <button id="btn-roots" class="btn">Klasorler</button>
+      <button id="btn-stop-all" class="btn danger">Tumunu Durdur</button>
+    </div>
+  </header>
+
+  <main id="grid" class="grid"></main>
+
+  <div id="empty" class="empty hidden">
+    <h2>Henuz proje yok</h2>
+    <p>Projelerinin bulundugu kok klasoru ekleyip yeniden tara.</p>
+    <button id="btn-empty-add" class="btn primary">Kok Klasor Ekle</button>
+  </div>
+
+  <!-- Log paneli -->
+  <section id="logpanel" class="logpanel hidden">
+    <div class="logpanel-head">
+      <strong id="log-title">Log</strong>
+      <div class="spacer"></div>
+      <label class="checkbox"><input type="checkbox" id="log-autoscroll" checked /> Otomatik kaydir</label>
+      <button id="log-clear" class="btn small">Temizle</button>
+      <button id="log-close" class="btn small">Kapat</button>
+    </div>
+    <pre id="log-body" class="logpanel-body"></pre>
+  </section>
+
+  <!-- Kok klasor yonetimi -->
+  <div id="roots-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Kok Klasorler</h2>
+      <p class="muted">Bu klasorlerin altindaki projeler (2 seviye derinlige kadar) taranir.</p>
+      <ul id="roots-list" class="roots-list"></ul>
+      <div class="modal-actions">
+        <button id="roots-add" class="btn primary">Klasor Ekle</button>
+        <button id="roots-close" class="btn">Kapat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Proje ayarlari -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="settings-title">Proje Ayarlari</h2>
+      <p class="muted" id="settings-path"></p>
+
+      <label>Gorunen ad<input id="f-name" type="text" /></label>
+      <label>Kurulum komutu<input id="f-install" type="text" placeholder="orn. npm install" /></label>
+      <label>Build komutu<input id="f-build" type="text" placeholder="orn. npm run build" /></label>
+      <label>Calistirma komutu<input id="f-start" type="text" placeholder="orn. npm run dev" /></label>
+      <label>Ortam degiskenleri (her satirda KEY=deger)<textarea id="f-env" rows="3"></textarea></label>
+
+      <div class="modal-actions">
+        <button id="settings-reset" class="btn">Otomatik Algilamaya Don</button>
+        <button id="settings-hide" class="btn">Listeden Gizle</button>
+        <div class="spacer"></div>
+        <button id="settings-cancel" class="btn">Vazgec</button>
+        <button id="settings-save" class="btn primary">Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

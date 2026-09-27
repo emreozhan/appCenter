@@ -1,0 +1,27 @@
+{
+  "name": "app-center",
+  "version": "1.0.0",
+  "description": "AI projelerini tek yerden tarayan, build eden ve calistiran masaustu kontrol paneli",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.emreo.appcenter",
+    "productName": "App Center",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
