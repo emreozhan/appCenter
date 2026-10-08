@@ -1,6 +1,6 @@
 {
   "name": "app-center",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AI projelerini tek yerden tarayan, build eden ve calistiran masaustu kontrol paneli",
   "main": "src/main/index.js",
   "scripts": {

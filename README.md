@@ -1,140 +1,132 @@
 # App Center
 
-AI ile ürettiğin projeleri tek bir masaüstü panelden bulan, kuran, build eden ve çalıştırıp durduran bir Electron uygulaması.
+A Windows desktop dashboard (Electron) that finds all the small projects living under one or more folders, figures out how to install, build and run each of them, and lets you start, stop, build and commit them from a single window.
 
-Verdiğin kök klasörlerin altındaki alt klasörleri tarar, her projenin tipini otomatik tanır (Electron, Vite, Tauri, Node sunucu, Python, .NET/C#, Java, Go, Rust, statik HTML, .bat) ve her biri için kurulum / build / çalıştırma komutlarını üretir. Komutları beğenmezsen proje bazında kendi komutunu yazabilirsin.
+It was built for a folder full of AI-generated side projects, each with its own stack and its own commands that are hard to remember.
 
-## Kurulum
+> The user interface is currently in Turkish.
+
+## Features
+
+- **Project discovery** – scans the root folders you choose (up to 3 levels deep) and detects Electron, Vite, Next.js, Tauri, Node.js, Python, .NET/C#, Java (Maven/Gradle), Go, Rust, static HTML and plain `start.cmd`/`build.cmd` projects.
+- **Generated commands** – install, build and run commands are derived from each project's own configuration; any of them can be overridden per project.
+- **Start / stop** – runs the project in its own folder and stops the whole process tree (`taskkill /T`), so dev servers spawned by `npm run dev` are cleaned up too. Everything is stopped when App Center quits.
+- **Live logs** – stdout/stderr of runs, builds, installs and git operations in a log panel.
+- **Open in browser** – the first `http://localhost:PORT` printed by a project becomes an "Open" button.
+- **Built-in static server** – plain HTML projects are served on a free local port, no extra tooling needed.
+- **Git status on every card** – branch, number of changed files, commits ahead/behind, or "no repository".
+- **Commit & push** – commit dialog with the list of changed files; optional push afterwards.
+- **Organising** – search, filter by status/type, favourites (pinned to the top), collapsible cards, hidden projects, and group cards for nested projects.
+- **Launch at login** – optional Windows auto-start.
+
+## Requirements
+
+- Windows 10/11 (process handling uses `cmd.exe` and `taskkill`)
+- [Node.js](https://nodejs.org/) with npm (developed and tested with Node.js 22)
+- Git on `PATH` – optional, only needed for the git features
+
+## Getting Started
 
 ```bash
+git clone https://github.com/emreozhan/appCenter.git
+cd appCenter
 npm install
-```
-
-## Çalıştırma
-
-```bash
 npm start
 ```
 
-İlk açılışta uygulamanın bulunduğu klasörün üstü (`...\AiProjects`) kök klasör olarak eklenir. **Klasörler** butonundan istediğin kadar kök klasör ekleyip kaldırabilirsin; hepsi birlikte, 3 seviye derinliğe kadar taranır (`homeTool\yeelight-controller` gibi iç içe projeler de bulunur).
+On the first start the parent folder of the App Center checkout is added as a root folder. Use the **Klasorler** (Folders) button to add or remove root folders.
 
-## Neler yapabilir
+## Usage
 
-| Özellik | Açıklama |
-|---|---|
-| **▶ Başlat / ■ Durdur** | Projeyi kendi klasöründe çalıştırır. Durdurma, alt süreçleri de kapatır (`taskkill /T`), yani `npm run dev` altındaki vite/electron süreçleri de temizlenir. |
-| **🔨 Build** | Algılanan build komutunu çalıştırır, çıktıyı log panelinde gösterir. |
-| **⤓ Kur** | `npm install` / `pip install -r requirements.txt` gibi kurulum komutunu çalıştırır. `node_modules` yoksa kartta "kurulum gerekli" rozeti çıkar. |
-| **🌐 Aç** | Çalışan projenin log çıktısından yakalanan `http://localhost:PORT` adresini sistem tarayıcısında açar. |
-| **📄 Log** | Canlı stdout/stderr akışı, alt panelde. |
-| **📁 / >_** | Proje klasörünü Explorer'da, veya klasörü terminalde açar. |
-| **⚙ Ayarlar** | Görünen adı, kurulum/build/çalıştırma komutlarını ve ortam değişkenlerini proje bazında değiştirir. Boş bıraktığın alan otomatik algılamaya döner. |
-| **Arama / filtre** | İsim, yol, tip veya açıklamaya göre arama; duruma ve tipe göre filtre. |
-| **Tümünü Durdur** | Çalışan bütün projeleri kapatır. Uygulamadan çıkarken de otomatik yapılır. |
-| **Gizliler** | İlgilenmediğin projeleri listeden gizler, checkbox ile geri getirir. |
-| **▾ / ▸ Daralt** | Her kart başlığındaki ok (veya kart adına tıklama) kartı tek satıra indirir; daraltılmış kartta küçük ▶/■ butonu kalır. Üst çubuktaki **Tümünü Daralt / Genişlet** görünen tüm kartlara uygulanır. Durum kalıcıdır. |
-| **☆ Favori** | Yıldızlanan kartlar listenin başına gelir. Grup içindeki bir uygulama favoriyse hem grup kartı başa çıkar hem de o uygulama grubun içinde ilk sıraya geçer. |
-| **Grup kartları** | Kök klasörün doğrudan altında olmayan (iç içe) projeler, üst klasörlerinin tek kartında toplanır — ör. `homeTool` kartı içinde `yeelight-controller` ve `CodeOnlyWindowsApplication`. Her alt uygulamanın kendi Başlat/Build/Log butonları vardır. |
-| **Başlangıçta aç** | İşaretlendiğinde App Center, Windows oturumu açıldığında otomatik başlar (`HKCU\...\CurrentVersion\Run`). Kaydı Electron'un `setLoginItemSettings` API'si yönetir; kapatınca kayıt silinir. Paketlenmemiş çalışırken kayıt `electron.exe "<proje klasörü>"` şeklindedir, yani `node_modules` durduğu sürece geçerlidir. |
+Each detected project gets a card:
+
+| Control | What it does |
+| --- | --- |
+| ▶ / ■ | Start / stop the project |
+| 🔨 Build | Run the build command |
+| ⤓ Kur | Run the install command (`npm install`, `pip install -r requirements.txt`, …). A "kurulum gerekli" badge appears when `node_modules` is missing |
+| 🌐 Ac | Open the detected local URL |
+| ✔ Commit / ⇡ Push | Git commit dialog / push |
+| 📄 📁 >_ | Log panel, open folder in Explorer, open a terminal in the folder |
+| ⚙ | Override name, install/build/run commands and environment variables. Clearing a field returns to the detected value |
+| ☆ | Favourite – favourites are listed first |
+| ▾ / ▸ | Collapse the card to a single line (a small ▶/■ button stays visible) |
+
+Keyboard: `Ctrl+F` search, `F5` / `Ctrl+R` rescan, `Esc` close dialogs, `Ctrl+Enter` commit.
+
+### Nested projects
+
+Projects that are not directly under a root folder (for example `tools/light-controller`) are shown together on one group card named after their top-level folder. If that folder has its own `start.cmd`, it appears as the first row of the group instead of as a separate card.
 
 ### Git
 
-Her kartın başlığında projenin git durumu görünür (daraltılmış kartta da):
+The badge next to the project name shows:
 
-| Rozet | Anlamı |
-|---|---|
-| `⎇ main` (yeşil) | Depo var, değişiklik yok |
-| `⎇ main ±5` (sarı) | 5 dosyada commit edilmemiş değişiklik |
-| `↑2` / `↓1` | 2 commit push bekliyor / 1 commit geride (son `fetch`'e göre; App Center kendiliğinden fetch yapmaz) |
-| `git yok` | Klasör bir git deposunda değil |
+| Badge | Meaning |
+| --- | --- |
+| `⎇ main` (green) | Repository, no local changes |
+| `⎇ main ±5` (amber) | 5 changed files |
+| `↑2` / `↓1` | 2 commits to push / 1 commit behind (as of the last `fetch`; App Center never fetches by itself) |
+| `git yok` | Not inside a git repository |
 
-Rozetin üzerine gelince depo kökü, upstream ve remote bilgisi görünür. Kart genişletildiğinde **✔ Commit** ve **⇡ Push** butonları çıkar:
+- **Commit** runs `git add -A -- .` and `git commit -- .` in the project folder. The scope is always that folder: for a project inside a parent repository only its own folder is committed, and files staged elsewhere in the repository are left alone.
+- **Push** runs `git push`, or `git push -u origin HEAD` when no upstream is set. It is disabled when there is no remote or nothing to push.
+- Git is called without a shell and with an argument list, so commit messages are passed verbatim. The commit identity comes from your git configuration.
+- Status is refreshed after each scan and when the window regains focus (at most every 15 s), so commits made in a terminal show up too.
 
-- **Commit**, değişen dosyaları listeleyen bir pencere açar. Mesaj yazılıp Commit'e basılınca (veya Ctrl+Enter) `git add -A -- .` ve `git commit -- .` çalışır. İstenirse ardından push da yapılır.
-- Kapsam her zaman **o projenin klasörüdür**. Üst klasörün deposunu paylaşan iç içe projelerde (ör. `home-inventory/frontend`) yalnızca o alt klasördeki değişiklikler commit'lenir. Depoda başka yerde stage'lenmiş dosyalar bu commit'e girmez.
-- **Push**, upstream varsa `git push`, yoksa `git push -u origin HEAD` çalıştırır. Remote tanımlı değilse ya da gönderilecek commit yoksa buton pasiftir.
-- Commit kimliği deponun/kullanıcının git ayarından gelir. Çıktılar proje log panelinde görünür.
-- Git durumu tarama sonrası ve pencereye geri dönüldüğünde (en sık 15 sn'de bir) tazelenir. Terminalden yapılan commit'ler böylece yansır.
+## How commands are chosen
 
-Statik HTML projeleri (ör. `m3u-player`) için ayrı bir sunucuya gerek yok — uygulama boş bir porta dahili bir HTTP sunucusu açar ve adresi verir.
+For each project, App Center picks the first available option:
 
-Kısayollar: `Ctrl+F` arama, `F5` / `Ctrl+R` yeniden tara, `Esc` açık pencereyi kapat.
+1. A command you entered in the project settings (⚙)
+2. The project's own configuration – `package.json` scripts (`dev`/`start`, `build`/`dist`), `*.csproj`, `pom.xml` / `build.gradle`, `Cargo.toml`, `go.mod`, a Python entry file (`manage.py`, `app.py`, `main.py`, `serve.py`, …), or an `.exe` next to C# sources
+3. A script in the project root: `start.cmd > start.bat > start.ps1 > run.cmd > run.bat > run.ps1` for running, `build.cmd > build.bat > build.ps1` for building
+4. A plain guess – `npx vite`, `npx electron .`, `npx next dev`, or the built-in static server for an `index.html`
 
-## Proje tipi algılama
+The detected project type is kept in every case. Folders recognised as a project are not scanned further, except folders that only contain root scripts, whose sub-folders are still searched. `node_modules`, `dist`, `build`, `out`, `target`, `.git`, `venv` and similar folders are skipped.
 
-| Bulunan dosya | Tip | Çalıştırma |
-|---|---|---|
-| `package.json` + `src-tauri/` | Tauri | `npm run tauri dev` |
-| `package.json` + `electron` bağımlılığı | Electron | `npm run dev` ya da `npm start` |
-| `package.json` + `next` | Next.js | `npm run dev` |
-| `package.json` + `vite` | Vite | `npm run dev` |
-| `package.json` (diğer) | Node | `npm start` ya da `node <main>` |
-| `*.csproj` / `build.cmd` + `*.cs` | .NET / C# | `.\<uygulama>.exe` ya da `dotnet run` |
-| `pom.xml` / `build.gradle` | Java | `mvn spring-boot:run` / `gradlew bootRun` |
-| `Cargo.toml` | Rust | `cargo run` |
-| `go.mod` | Go | `go run .` |
-| `manage.py` / `app.py` / `main.py` / `serve.py` | Python | `python <dosya>` (varsa `.venv` yorumlayıcısı) |
-| yalnız `start.cmd` / `build.cmd` | Script | `.\start.cmd` |
-| sadece `index.html` | Statik Web | `start.cmd` yoksa dahili HTTP sunucusu |
+## Configuration
 
-Tablodaki komutlar yalnızca projenin yapılandırmasında karşılığı varsa kullanılır (ör. `package.json`'da `dev`/`start` script'i). Yoksa kökteki `start.cmd` / `build.cmd` devreye girer (bkz. [Kok build ve start scriptleri](#kok-build-ve-start-scriptleri)).
+Settings are stored in `%APPDATA%\app-center\config.json`: root folders, per-project command overrides, hidden projects, favourites, collapsed cards and the scan depth (`maxDepth`, default 3).
 
-Bir klasör proje olarak tanınırsa içine daha fazla inilmez. `node_modules`, `dist`, `out`, `target`, `.git`, `venv` gibi klasörler atlanır.
+"Launch at login" is stored by Windows (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`) through Electron's `setLoginItemSettings`. When running from source the entry points to `electron.exe "<app folder>"`, so it keeps working only while `node_modules` is present.
 
-## Ayarların saklandığı yer
+## Development
 
-`%APPDATA%\app-center\config.json` — kök klasörler, proje bazlı komut geçersiz kılmaları, gizlenen projeler, favoriler, daraltılmış kartlar ve `maxDepth` (varsayılan 3) burada tutulur.
+```bash
+npm test        # detection, scanning and git regression tests (node:test)
+npm run dist    # Windows installer via electron-builder (NSIS)
+```
 
-## Mimari
+## Project Structure
 
 ```
 src/
-├── main/                 # Node erişimi olan main process
-│   ├── index.js          # pencere, uygulama yaşam döngüsü
-│   ├── config.js         # config.json okuma/yazma
-│   ├── detector.js       # klasör -> proje tipi + komutlar
-│   ├── scanner.js        # kök klasörleri gezme
-│   ├── processManager.js # spawn / kill / log / durum
-│   ├── staticServer.js   # statik projeler için dahili HTTP
-│   ├── git.js            # git durumu, kapsamlı commit, push (shell'siz execFile)
-│   └── ipc/handlers.js   # tüm ipcMain.handle kanalları
-├── preload/index.js      # contextBridge ile sınırlı API
-├── renderer/             # UI (Node erişimi yok)
+├── main/                  # Electron main process (file system, processes, git)
+│   ├── index.js           # window and app lifecycle
+│   ├── config.js          # config.json read/write
+│   ├── detector.js        # folder -> project type and commands
+│   ├── scanner.js         # walks the root folders, groups nested projects
+│   ├── processManager.js  # spawn / kill / logs / state
+│   ├── staticServer.js    # built-in HTTP server for static projects
+│   ├── git.js             # git status, scoped commit, push
+│   ├── startup.js         # launch at login
+│   └── ipc/handlers.js    # all ipcMain.handle channels
+├── preload/index.js       # narrow API exposed with contextBridge
+├── renderer/              # UI (no Node.js access)
 └── shared/ipc-channels.js
 ```
 
-Güvenlik: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. Renderer'a ham `ipcRenderer` verilmez; sadece isimlendirilmiş fonksiyonlar açılır ve gelen her proje kimliği main tarafında son tarama sonucuna karşı doğrulanır.
+Security: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. The renderer never gets the raw `ipcRenderer`; every project id coming from the UI is validated in the main process against the last scan.
 
-## Paketleme
+## License
 
-```bash
-npm run dist
-```
+[MIT](LICENSE)
 
-`electron-builder` ile Windows kurulumu üretir.
+---
 
-## Kok build ve start scriptleri
+## Türkçe özet
 
-Proje kokunde `build.cmd` ve `start.cmd` bulunmasi yeterlidir (komutlar: `.\build.cmd`, `.\start.cmd`).
-Algilama onceligi build icin `build.cmd > build.bat > build.ps1`, start icin
-`start.cmd > start.bat > start.ps1 > run.cmd > run.bat > run.ps1` seklindedir.
-Komut onceligi (yukaridan asagi):
+App Center, verdiğin kök klasörlerdeki projeleri bulan; her biri için kurulum, build ve çalıştırma komutlarını üreten ve hepsini tek pencereden başlatıp durdurmanı sağlayan bir Electron masaüstü uygulamasıdır. Kartlarda git durumu görünür, commit ve push yapılabilir; favoriler, daraltılabilir kartlar ve iç içe projeler için grup kartları vardır. Arayüz Türkçedir.
 
-1. Ayarlarda (⚙) elle girilen komut
-2. Projenin yapilandirmasi: `package.json` script'i (`dev`/`start`, `build`/`dist`), `*.csproj`, `pom.xml`, `Cargo.toml`, `go.mod`, Python giris dosyasi, `.exe`
-3. Kokteki `start.cmd` / `build.cmd` (yapilandirmada komut yoksa)
-4. Salt tahmin: `npx vite`, `npx electron .`, `npx next dev`, statik projede dahili sunucu
-
-Yani `package.json`'unda `dev` script'i olan bir Vite projesi `npm run dev` ile, script'i olmayan bir proje `.\start.cmd` ile baslar; proje tipi her durumda korunur.
-PowerShell scriptleri NoProfile ile calisir.
-Degisiklikten sonra uygulamayi yeniden baslatin ve Yenile ile tarayin; eski ozel komut varsa ayarlardan sifirlayin.
-
-Yalniz script iceren semsiye klasorler alt projeleri gizlemez; maxDepth sinirina kadar taranmaya devam eder.
-Boyle bir klasorun alt projeleri varsa klasor ayri kart olarak gorunmez; kendi grup kartinin ilk satiri
-("klasor koku") olur, alt projeler onun altinda listelenir.
-Bos/iskeletten ibaret projeler hata kodu ve aciklayici mesaj verir. Belge projelerinde build derleme gerekmedigini,
-start ilgili belgeyi gosterir. CAD/oyun modlari gibi harici ana uygulama isteyen projeler gereksinimlerini bildirir.
-Scriptler calisma dizinini kendi klasorune alir, hata kodlarini aktarir ve kullanici girdisi beklemez.
-Mevcut eski scriptler korunur. Node projelerinde kurulum icin README'deki npm komutunu kullanin.
-
-Algilama ve tarama regresyon kontrolleri: `npm test`.
+Kurulum ve çalıştırma: `npm install`, ardından `npm start`. Testler: `npm test`.
