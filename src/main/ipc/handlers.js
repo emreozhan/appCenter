@@ -32,6 +32,15 @@ function requireProject(id) {
   return p;
 }
 
+/** Kart kimligi bilinen bir proje ya da grup klasoru mu? */
+function isKnownCardKey(key) {
+  if (typeof key !== 'string' || !key) return false;
+  for (const p of projects.values()) {
+    if (p.id === key || p.groupId === key) return true;
+  }
+  return false;
+}
+
 /** Bir override degisikligi sonrasi ilgili projeyi tazeler. */
 function reloadProject(id) {
   const win = BrowserWindow.getAllWindows()[0];
@@ -77,6 +86,16 @@ function register(getWindow) {
     const p = requireProject(id);
     config.toggleHidden(p.path);
     return reloadProject(id);
+  });
+
+  ipcMain.handle(CH.CONFIG_TOGGLE_FAVORITE, (_e, key) => {
+    if (!isKnownCardKey(key)) throw new Error('Gecersiz kart kimligi');
+    return config.toggleFavorite(key);
+  });
+
+  ipcMain.handle(CH.CONFIG_SET_COLLAPSED, (_e, keys, collapsed) => {
+    if (!Array.isArray(keys) || keys.length > 1000) throw new Error('Gecersiz kart listesi');
+    return config.setCollapsed(keys.filter(isKnownCardKey), collapsed === true);
   });
 
   /* -------------------------- baslangic -------------------------- */

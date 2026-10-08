@@ -19,7 +19,7 @@ function subDirs(dir) {
 
 /**
  * Kok klasorler altinda maxDepth seviyeye kadar proje arar.
- * Bir klasor proje olarak taninirsa icine inilmez.
+ * Teknoloji koklerinde durur; yalniz script iceren semsiye klasorleri de tarar.
  */
 function scan(onProgress) {
   const cfg = config.get();
@@ -36,7 +36,8 @@ function scan(onProgress) {
       const project = detect(child);
       if (project) {
         found.set(key, project);
-      } else {
+      }
+      if (!project || project.scanChildren) {
         walk(child, depth + 1);
       }
     }
@@ -47,14 +48,68 @@ function scan(onProgress) {
     walk(root, 1);
   }
 
-  return [...found.values()]
-    .map((p) => applyOverrides(p, cfg))
-    .sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  const projects = [...found.values()].map((p) => applyOverrides(p, cfg));
+  mergeUmbrellas(projects);
+  return projects.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+}
+
+/**
+ * Kendi start.cmd'si olan ve alt projeleri de bulunan semsiye klasor
+ * (ornek: homeTool) hem tekli kart hem grup karti olarak iki kez gorunmesin:
+ * klasoru kendi grubunun ilk ogesi yapar.
+ */
+function mergeUmbrellas(projects) {
+  const groupIds = new Set(projects.map((p) => p.groupId).filter(Boolean));
+  for (const p of projects) {
+    if (p.groupId || !groupIds.has(p.id)) continue;
+    Object.assign(p, {
+      groupId: p.id,
+      groupName: path.basename(p.path),
+      groupPath: p.path,
+      subPath: 'klasor koku',
+      isGroupRoot: true
+    });
+  }
+}
+
+/** Projeyi iceren en spesifik kok klasoru bulur. */
+function findRoot(key, roots) {
+  let best = '';
+  let bestKey = '';
+  for (const r of roots) {
+    const rk = config.normalizeKey(r);
+    const inside = key === rk || key.startsWith(rk + path.sep);
+    if (inside && rk.length > bestKey.length) {
+      best = r;
+      bestKey = rk;
+    }
+  }
+  return best;
+}
+
+/**
+ * Kok klasorun dogrudan altinda olmayan (ic ice) projeleri, kokun altindaki
+ * ilk klasor adina gore gruplar. Ornek: AiProjects/homeTool/yeelight-controller
+ * -> grup "homeTool", alt yol "yeelight-controller".
+ */
+function groupOf(projectPath, root) {
+  const empty = { groupId: null, groupName: null, groupPath: null, subPath: null };
+  if (!root) return empty;
+  const parts = path.relative(root, projectPath).split(path.sep).filter(Boolean);
+  if (parts.length < 2) return empty;
+  const groupPath = path.join(root, parts[0]);
+  return {
+    groupId: config.normalizeKey(groupPath),
+    groupName: parts[0],
+    groupPath,
+    subPath: parts.slice(1).join(' / ')
+  };
 }
 
 function applyOverrides(project, cfg) {
   const key = config.normalizeKey(project.path);
   const ov = cfg.overrides[key] || {};
+  const root = findRoot(key, cfg.roots);
   return {
     ...project,
     id: key,
@@ -71,7 +126,8 @@ function applyOverrides(project, cfg) {
     env: ov.env || '',
     customized: Object.keys(ov).length > 0,
     hidden: cfg.hidden.some((h) => config.normalizeKey(h) === key),
-    root: cfg.roots.find((r) => key.startsWith(config.normalizeKey(r))) || ''
+    root,
+    ...groupOf(project.path, root)
   };
 }
 

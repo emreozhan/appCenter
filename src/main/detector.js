@@ -8,7 +8,7 @@ const IGNORED_DIRS = new Set([
   'node_modules', '.git', '.svn', '.hg', 'dist', 'build', 'out', 'target',
   '.next', '.nuxt', '.cache', '.vite', '.turbo', 'coverage', '__pycache__',
   'venv', '.venv', 'env', '.idea', '.vscode', 'bin', 'obj', 'vendor',
-  'release', 'releases', 'src-tauri'
+  'release', 'releases', 'src-tauri', 'data', 'secrets', 'private-backups', 'external'
 ]);
 
 const STATIC_SERVER = '@static'; // processManager icindeki dahili http sunucusu
@@ -46,6 +46,14 @@ function pythonBin(dir) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Komut onceligi                                                      */
+/*   1. start / build      : projenin yapilandirmasindan (package.json  */
+/*                           script'i, csproj, pom, Cargo, giris dosyasi) */
+/*   2. start.cmd/build.cmd : yapilandirmada komut yoksa                */
+/*   3. fallbackStart/Build : salt tahmin (npx vite, dahili sunucu ...) */
+/* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
 /* Node / package.json                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -73,8 +81,14 @@ function detectNode(dir, pkg) {
     result.type = 'tauri';
     result.typeLabel = 'Tauri';
     result.icon = '\u{1F980}';
-    result.start = scripts['tauri:dev'] ? npm('tauri:dev') : 'npm run tauri dev';
-    result.build = scripts['tauri:build'] ? npm('tauri:build') : 'npm run tauri build';
+    if (scripts['tauri:dev']) result.start = npm('tauri:dev');
+    else if (scripts.tauri) result.start = 'npm run tauri dev';
+    if (scripts['tauri:build']) result.build = npm('tauri:build');
+    else if (scripts.tauri) result.build = 'npm run tauri build';
+    if (has('@tauri-apps/cli')) {
+      result.fallbackStart = 'npx tauri dev';
+      result.fallbackBuild = 'npx tauri build';
+    }
     return result;
   }
 
@@ -83,10 +97,10 @@ function detectNode(dir, pkg) {
     result.typeLabel = 'Electron';
     result.icon = '⚡';
     const s = script('dev', 'start', 'electron:dev');
-    result.start = s ? npm(s) : 'npx electron .';
+    if (s) result.start = npm(s);
+    result.fallbackStart = 'npx electron .';
     const dist = script('dist', 'build:win', 'package');
     if (dist) result.build = npm(dist);
-    else if (buildScript) result.build = npm(buildScript);
     return result;
   }
 
@@ -94,7 +108,9 @@ function detectNode(dir, pkg) {
     result.type = 'next';
     result.typeLabel = 'Next.js';
     result.icon = '▲';
-    result.start = npm(script('dev') || 'dev');
+    const s = script('dev', 'start');
+    if (s) result.start = npm(s);
+    result.fallbackStart = 'npx next dev';
     return result;
   }
 
@@ -103,7 +119,8 @@ function detectNode(dir, pkg) {
     result.typeLabel = has('react') ? 'Vite + React' : 'Vite';
     result.icon = '\u{1F53A}';
     const s = script('dev', 'start', 'serve');
-    result.start = s ? npm(s) : 'npx vite';
+    if (s) result.start = npm(s);
+    result.fallbackStart = 'npx vite';
     return result;
   }
 
@@ -224,17 +241,24 @@ function detectRust(dir) {
   };
 }
 
-function detectBatch(dir) {
-  const bat = firstExisting(dir, ['start.bat', 'run.bat', 'start.cmd', 'run.cmd']);
-  if (!bat) return null;
+/**
+ * Proje kokundeki start/build script'leri. Yapilandirmadan komut
+ * bulunamadiginda kullanilir; salt tahminlerden ise onceliklidir.
+ */
+function rootScripts(dir) {
+  const command = (names) => {
+    const file = names.find((name) => {
+      try { return fs.statSync(path.join(dir, name)).isFile(); }
+      catch { return false; }
+    });
+    if (!file) return null;
+    return file.endsWith('.ps1')
+      ? 'powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "./' + file + '"'
+      : '.\\' + file;
+  };
   return {
-    type: 'batch',
-    typeLabel: 'Script',
-    icon: '\u{1F4DC}',
-    install: null,
-    needsInstall: false,
-    build: null,
-    start: `.\\${bat}`
+    build: command(['build.cmd', 'build.bat', 'build.ps1']),
+    start: command(['start.cmd', 'start.bat', 'start.ps1', 'run.cmd', 'run.bat', 'run.ps1'])
   };
 }
 
@@ -247,7 +271,9 @@ function detectStatic(dir) {
     install: null,
     needsInstall: false,
     build: null,
-    start: STATIC_SERVER
+    start: null,
+    // index.html bir calistirma yapilandirmasi degil; start.cmd varsa o kazanir
+    fallbackStart: STATIC_SERVER
   };
 }
 
@@ -262,7 +288,8 @@ function readme(dir) {
       .split(/\r?\n/)
       .map((l) => l.trim())
       .find((l) => l && !l.startsWith('#') && !l.startsWith('![') && !l.startsWith('<'));
-    return line ? line.slice(0, 160) : '';
+    // kalin/kod isaretlerini (** ve `) temizle; kart duz metin gosterir
+    return line ? line.replace(/\*\*|`/g, '').slice(0, 160) : '';
   } catch {
     return '';
   }
@@ -289,15 +316,26 @@ function detect(dir) {
   if (!base) base = detectRust(dir);
   if (!base) base = detectGo(dir);
   if (!base) base = detectPython(dir);
-  if (!base) base = detectBatch(dir);
   if (!base) base = detectStatic(dir);
+  const scripts = rootScripts(dir);
+  if (!base && (scripts.build || scripts.start)) {
+    base = {
+      type: 'batch', typeLabel: 'Script', icon: '\u{1F4DC}',
+      install: null, needsInstall: false, build: null, start: null,
+      // Bir semsiye klasore script eklemek alt projelerini gizlememeli.
+      scanChildren: true
+    };
+  }
   if (!base) return null;
 
+  const { fallbackStart, fallbackBuild, ...rest } = base;
   return {
     path: path.resolve(dir),
     name: path.basename(dir),
     description: description || readme(dir),
-    ...base
+    ...rest,
+    start: base.start || scripts.start || fallbackStart || null,
+    build: base.build || scripts.build || fallbackBuild || null
   };
 }
 

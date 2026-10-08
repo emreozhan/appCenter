@@ -32,6 +32,9 @@ npm start
 | **Arama / filtre** | İsim, yol, tip veya açıklamaya göre arama; duruma ve tipe göre filtre. |
 | **Tümünü Durdur** | Çalışan bütün projeleri kapatır. Uygulamadan çıkarken de otomatik yapılır. |
 | **Gizliler** | İlgilenmediğin projeleri listeden gizler, checkbox ile geri getirir. |
+| **▾ / ▸ Daralt** | Her kart başlığındaki ok (veya kart adına tıklama) kartı tek satıra indirir; daraltılmış kartta küçük ▶/■ butonu kalır. Üst çubuktaki **Tümünü Daralt / Genişlet** görünen tüm kartlara uygulanır. Durum kalıcıdır. |
+| **☆ Favori** | Yıldızlanan kartlar listenin başına gelir. Grup içindeki bir uygulama favoriyse hem grup kartı başa çıkar hem de o uygulama grubun içinde ilk sıraya geçer. |
+| **Grup kartları** | Kök klasörün doğrudan altında olmayan (iç içe) projeler, üst klasörlerinin tek kartında toplanır — ör. `homeTool` kartı içinde `yeelight-controller` ve `CodeOnlyWindowsApplication`. Her alt uygulamanın kendi Başlat/Build/Log butonları vardır. |
 | **Başlangıçta aç** | İşaretlendiğinde App Center, Windows oturumu açıldığında otomatik başlar (`HKCU\...\CurrentVersion\Run`). Kaydı Electron'un `setLoginItemSettings` API'si yönetir; kapatınca kayıt silinir. Paketlenmemiş çalışırken kayıt `electron.exe "<proje klasörü>"` şeklindedir, yani `node_modules` durduğu sürece geçerlidir. |
 
 Statik HTML projeleri (ör. `m3u-player`) için ayrı bir sunucuya gerek yok — uygulama boş bir porta dahili bir HTTP sunucusu açar ve adresi verir.
@@ -52,14 +55,16 @@ Kısayollar: `Ctrl+F` arama, `F5` / `Ctrl+R` yeniden tara, `Esc` açık pencerey
 | `Cargo.toml` | Rust | `cargo run` |
 | `go.mod` | Go | `go run .` |
 | `manage.py` / `app.py` / `main.py` / `serve.py` | Python | `python <dosya>` (varsa `.venv` yorumlayıcısı) |
-| `start.bat` / `run.bat` | Script | `.\start.bat` |
-| sadece `index.html` | Statik Web | dahili HTTP sunucusu |
+| yalnız `start.cmd` / `build.cmd` | Script | `.\start.cmd` |
+| sadece `index.html` | Statik Web | `start.cmd` yoksa dahili HTTP sunucusu |
+
+Tablodaki komutlar yalnızca projenin yapılandırmasında karşılığı varsa kullanılır (ör. `package.json`'da `dev`/`start` script'i). Yoksa kökteki `start.cmd` / `build.cmd` devreye girer (bkz. [Kok build ve start scriptleri](#kok-build-ve-start-scriptleri)).
 
 Bir klasör proje olarak tanınırsa içine daha fazla inilmez. `node_modules`, `dist`, `out`, `target`, `.git`, `venv` gibi klasörler atlanır.
 
 ## Ayarların saklandığı yer
 
-`%APPDATA%\app-center\config.json` — kök klasörler, proje bazlı komut geçersiz kılmaları, gizlenen projeler ve `maxDepth` (varsayılan 3) burada tutulur.
+`%APPDATA%\app-center\config.json` — kök klasörler, proje bazlı komut geçersiz kılmaları, gizlenen projeler, favoriler, daraltılmış kartlar ve `maxDepth` (varsayılan 3) burada tutulur.
 
 ## Mimari
 
@@ -87,3 +92,29 @@ npm run dist
 ```
 
 `electron-builder` ile Windows kurulumu üretir.
+
+## Kok build ve start scriptleri
+
+Proje kokunde `build.cmd` ve `start.cmd` bulunmasi yeterlidir (komutlar: `.\build.cmd`, `.\start.cmd`).
+Algilama onceligi build icin `build.cmd > build.bat > build.ps1`, start icin
+`start.cmd > start.bat > start.ps1 > run.cmd > run.bat > run.ps1` seklindedir.
+Komut onceligi (yukaridan asagi):
+
+1. Ayarlarda (⚙) elle girilen komut
+2. Projenin yapilandirmasi: `package.json` script'i (`dev`/`start`, `build`/`dist`), `*.csproj`, `pom.xml`, `Cargo.toml`, `go.mod`, Python giris dosyasi, `.exe`
+3. Kokteki `start.cmd` / `build.cmd` (yapilandirmada komut yoksa)
+4. Salt tahmin: `npx vite`, `npx electron .`, `npx next dev`, statik projede dahili sunucu
+
+Yani `package.json`'unda `dev` script'i olan bir Vite projesi `npm run dev` ile, script'i olmayan bir proje `.\start.cmd` ile baslar; proje tipi her durumda korunur.
+PowerShell scriptleri NoProfile ile calisir.
+Degisiklikten sonra uygulamayi yeniden baslatin ve Yenile ile tarayin; eski ozel komut varsa ayarlardan sifirlayin.
+
+Yalniz script iceren semsiye klasorler alt projeleri gizlemez; maxDepth sinirina kadar taranmaya devam eder.
+Boyle bir klasorun alt projeleri varsa klasor ayri kart olarak gorunmez; kendi grup kartinin ilk satiri
+("klasor koku") olur, alt projeler onun altinda listelenir.
+Bos/iskeletten ibaret projeler hata kodu ve aciklayici mesaj verir. Belge projelerinde build derleme gerekmedigini,
+start ilgili belgeyi gosterir. CAD/oyun modlari gibi harici ana uygulama isteyen projeler gereksinimlerini bildirir.
+Scriptler calisma dizinini kendi klasorune alir, hata kodlarini aktarir ve kullanici girdisi beklemez.
+Mevcut eski scriptler korunur. Node projelerinde kurulum icin README'deki npm komutunu kullanin.
+
+Algilama ve tarama regresyon kontrolleri: `npm test`.

@@ -12,6 +12,10 @@ const DEFAULTS = {
   overrides: {},
   // gizlenen proje yollari
   hidden: [],
+  // favori kart kimlikleri (proje ya da grup klasoru, normalize edilmis yol)
+  favorites: [],
+  // daraltilmis kart kimlikleri
+  collapsed: [],
   settings: {
     stopAllOnQuit: true
   }
@@ -40,6 +44,8 @@ function load() {
       settings: { ...DEFAULTS.settings, ...(parsed.settings || {}) },
       overrides: parsed.overrides || {},
       hidden: Array.isArray(parsed.hidden) ? parsed.hidden : [],
+      favorites: Array.isArray(parsed.favorites) ? parsed.favorites : [],
+      collapsed: Array.isArray(parsed.collapsed) ? parsed.collapsed : [],
       roots: Array.isArray(parsed.roots) ? parsed.roots : []
     };
   } catch {
@@ -123,6 +129,34 @@ function isHidden(projectPath) {
   return load().hidden.some((h) => normalizeKey(h) === key);
 }
 
+/**
+ * Kart kimligini favorilere ekler ya da cikarir.
+ * @param {string} key normalize edilmis proje/grup yolu
+ */
+function toggleFavorite(key) {
+  const cfg = load();
+  const idx = cfg.favorites.indexOf(key);
+  if (idx >= 0) cfg.favorites.splice(idx, 1);
+  else cfg.favorites.push(key);
+  return save();
+}
+
+/**
+ * Verilen kartlari daraltilmis / acik olarak isaretler.
+ * @param {string[]} keys normalize edilmis proje/grup yollari
+ * @param {boolean} collapsed
+ */
+function setCollapsed(keys, collapsed) {
+  const cfg = load();
+  const set = new Set(cfg.collapsed);
+  for (const key of keys) {
+    if (collapsed) set.add(key);
+    else set.delete(key);
+  }
+  cfg.collapsed = [...set];
+  return save();
+}
+
 module.exports = {
   get,
   save,
@@ -133,5 +167,7 @@ module.exports = {
   getOverride,
   toggleHidden,
   isHidden,
+  toggleFavorite,
+  setCollapsed,
   normalizeKey
 };

@@ -5,7 +5,8 @@
   "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "test": "node --test src/main/project-scripts.test.js"
   },
   "author": "",
   "license": "MIT",

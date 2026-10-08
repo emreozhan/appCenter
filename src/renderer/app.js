@@ -9,7 +9,11 @@ const state = {
   filterStatus: 'all',
   filterType: 'all',
   activeLog: null,
-  showHidden: false
+  showHidden: false,
+  /** favori kart kimlikleri (proje id'si ya da grup id'si) */
+  favorites: new Set(),
+  /** daraltilmis kart kimlikleri */
+  collapsed: new Set()
 };
 
 /* ----------------------------- yardimcilar ----------------------------- */
@@ -52,55 +56,120 @@ const STATUS_LABEL = {
   error: 'Hata'
 };
 
-/* -------------------------------- kartlar ------------------------------- */
+const isRunning = (status) => status === 'running' || status === 'starting';
 
-function buildCard(project) {
+/** Log basliginda ve ayarlarda kullanilan tam ad (grup icindeyse "grup / ad"). */
+function displayName(project) {
+  return project.groupName ? `${project.groupName} / ${project.name}` : project.name;
+}
+
+/* ------------------------ kart parcalari (ortak) ------------------------ */
+
+function statusNode(cls, label) {
+  const status = el('div', 'status');
+  status.append(el('span', `dot ${cls}`));
+  status.append(el('span', null, label));
+  return status;
+}
+
+function projectStatusNode(project) {
   const proc = procOf(project.id);
-  const busy = Boolean(proc.task);
+  if (proc.task) return statusNode('busy', proc.taskLabel);
+  return statusNode(proc.status, STATUS_LABEL[proc.status] || proc.status);
+}
 
-  const card = el('article', 'card');
-  card.classList.add(busy ? 'busy' : proc.status);
-  card.dataset.id = project.id;
+function iconButton(className, text, title, onClick) {
+  const btn = el('button', `icon-btn ${className}`, text);
+  btn.title = title;
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    onClick();
+  };
+  return btn;
+}
 
-  /* baslik */
+function favoriteButton(key) {
+  const on = state.favorites.has(key);
+  return iconButton(
+    `star${on ? ' on' : ''}`,
+    on ? '★' : '☆',
+    on ? 'Favorilerden cikar' : 'Favorilere ekle',
+    () => toggleFavorite(key)
+  );
+}
+
+function collapseButton(key) {
+  const collapsed = state.collapsed.has(key);
+  return iconButton(
+    'chevron',
+    collapsed ? '▸' : '▾',
+    collapsed ? 'Karti genislet' : 'Karti daralt',
+    () => toggleCollapsed(key)
+  );
+}
+
+/**
+ * Kart ya da alt oge basligi.
+ * @param {{collapseKey?: string, favoriteKey: string, icon: string, title: string,
+ *          sub?: string, status: HTMLElement, extra?: HTMLElement}} opts
+ */
+function headNode({ collapseKey, favoriteKey, icon, title, sub, status, extra }) {
   const head = el('div', 'card-head');
-  head.append(el('span', 'card-icon', project.icon || '\u{1F4E6}'));
+  if (collapseKey) head.append(collapseButton(collapseKey));
+  head.append(el('span', 'card-icon', icon || '\u{1F4E6}'));
 
-  const titleBox = el('div');
-  titleBox.style.minWidth = '0';
-  titleBox.append(el('div', 'card-title', project.name));
-  titleBox.append(el('div', 'card-sub', project.path));
+  const titleBox = el('div', 'card-titlebox');
+  const titleNode = el('div', 'card-title', title);
+  if (collapseKey) {
+    titleNode.classList.add('clickable');
+    titleNode.onclick = () => toggleCollapsed(collapseKey);
+  }
+  titleBox.append(titleNode);
+  if (sub) titleBox.append(el('div', 'card-sub', sub));
   head.append(titleBox);
 
-  const status = el('div', 'status');
-  status.append(el('span', `dot ${busy ? 'busy' : proc.status}`));
-  status.append(el('span', null, busy ? proc.taskLabel : STATUS_LABEL[proc.status] || proc.status));
   head.append(status);
-  card.append(head);
+  if (extra) head.append(extra);
+  head.append(favoriteButton(favoriteKey));
+  return head;
+}
 
-  /* rozetler */
+function badgesNode(project) {
+  const proc = procOf(project.id);
   const badges = el('div', 'badges');
   badges.append(el('span', 'badge', project.typeLabel));
   if (project.customized) badges.append(el('span', 'badge custom', 'ozel komut'));
   if (project.needsInstall) badges.append(el('span', 'badge warn', 'kurulum gerekli'));
   if (project.hidden) badges.append(el('span', 'badge', 'gizli'));
-  if (proc.url) {
-    const b = el('span', 'badge', proc.url.replace(/^https?:\/\//, ''));
-    badges.append(b);
-  }
-  card.append(badges);
+  if (proc.url) badges.append(el('span', 'badge', proc.url.replace(/^https?:\/\//, '')));
+  return badges;
+}
 
-  if (project.description) card.append(el('div', 'desc', project.description));
-  card.append(el('div', 'cmd', project.start ? `▶ ${project.start}` : 'Calistirma komutu tanimli degil'));
+function cmdNode(project) {
+  if (!project.start) return el('div', 'cmd', 'Calistirma komutu tanimli degil');
+  const command = project.start === '@static' ? 'dahili statik sunucu' : project.start;
+  return el('div', 'cmd', `▶ ${command}`);
+}
 
-  /* butonlar */
+/** Baslat/Durdur butonu; compact=true ise daraltilmis kart basligi icin kucuk hali. */
+function runButton(project, compact = false) {
+  const running = isRunning(procOf(project.id).status);
+  const label = compact ? (running ? '■' : '▶') : running ? '■ Durdur' : '▶ Baslat';
+  const btn = el('button', `btn ${running ? 'danger' : 'primary'}${compact ? ' small' : ''}`, label);
+  btn.title = running ? 'Durdur' : 'Baslat';
+  btn.disabled = !running && !project.start;
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    guard(running ? api.proc.stop(project.id) : api.proc.start(project.id));
+  };
+  return btn;
+}
+
+function actionsNode(project) {
+  const proc = procOf(project.id);
+  const busy = Boolean(proc.task);
   const actions = el('div', 'card-actions');
-  const running = proc.status === 'running' || proc.status === 'starting';
-
-  const runBtn = el('button', `btn ${running ? 'danger' : 'primary'}`, running ? '■ Durdur' : '▶ Baslat');
-  runBtn.disabled = !running && !project.start;
-  runBtn.onclick = () => guard(running ? api.proc.stop(project.id) : api.proc.start(project.id));
-  actions.append(runBtn);
+  actions.append(runButton(project));
 
   if (project.build) {
     const buildBtn = el('button', 'btn', '\u{1F528} Build');
@@ -149,50 +218,253 @@ function buildCard(project) {
   gearBtn.onclick = () => openSettings(project);
   actions.append(gearBtn);
 
-  card.append(actions);
-  return card;
+  return actions;
 }
 
-function visibleProjects() {
+/* ------------------------------- kartlar -------------------------------- */
+
+/** Tek projelik kart. Daraltilmissa sadece baslik + kucuk baslat/durdur. */
+function buildSingleCard(card) {
+  const project = card.project;
+  const proc = procOf(project.id);
+  const collapsed = state.collapsed.has(card.id);
+
+  const node = el('article', 'card');
+  node.classList.add(proc.task ? 'busy' : proc.status);
+  if (collapsed) node.classList.add('collapsed');
+  if (isFavoriteCard(card)) node.classList.add('favorite');
+
+  node.append(headNode({
+    collapseKey: card.id,
+    favoriteKey: project.id,
+    icon: project.icon,
+    title: project.name,
+    sub: project.path,
+    status: projectStatusNode(project),
+    extra: collapsed ? runButton(project, true) : null
+  }));
+  if (collapsed) return node;
+
+  node.append(badgesNode(project));
+  if (project.description) node.append(el('div', 'desc', project.description));
+  node.append(cmdNode(project));
+  node.append(actionsNode(project));
+  return node;
+}
+
+/** Grup kartindaki tek bir uygulama. */
+function buildSubItem(project) {
+  const proc = procOf(project.id);
+  const item = el('div', 'sub');
+  item.classList.add(proc.task ? 'busy' : proc.status);
+
+  item.append(headNode({
+    favoriteKey: project.id,
+    icon: project.icon,
+    title: project.name,
+    sub: project.subPath !== project.name ? project.subPath : '',
+    status: projectStatusNode(project)
+  }));
+  item.append(badgesNode(project));
+  item.append(cmdNode(project));
+  item.append(actionsNode(project));
+  return item;
+}
+
+/** Ayni ust klasordeki ic ice projeleri tek kartta toplar. */
+function buildGroupCard(card) {
+  const collapsed = state.collapsed.has(card.id);
+  const procs = card.children.map((p) => procOf(p.id));
+  const running = procs.filter((p) => isRunning(p.status)).length;
+  const busy = procs.some((p) => p.task);
+  const error = procs.some((p) => p.status === 'error');
+  const cls = busy ? 'busy' : running ? 'running' : error ? 'error' : 'stopped';
+
+  const node = el('article', 'card group');
+  node.classList.add(cls);
+  if (collapsed) node.classList.add('collapsed');
+  if (isFavoriteCard(card)) node.classList.add('favorite');
+
+  const count = `${card.children.length} uygulama`;
+  node.append(headNode({
+    collapseKey: card.id,
+    favoriteKey: card.id,
+    icon: '\u{1F4C2}',
+    title: card.name,
+    sub: card.path,
+    status: statusNode(cls, running ? `${count} · ${running} calisiyor` : count)
+  }));
+  if (collapsed) return node;
+
+  const list = el('div', 'sub-list');
+  for (const project of card.children) list.append(buildSubItem(project));
+  node.append(list);
+  return node;
+}
+
+/* --------------------------- filtre ve siralama --------------------------- */
+
+/**
+ * Proje filtrelere uyuyor mu?
+ * @param {boolean} groupHit arama metni grup adina uyuyorsa tum uyeler gosterilir
+ */
+function projectMatches(p, text, groupHit) {
+  if (p.hidden && !state.showHidden) return false;
+  if (state.filterType !== 'all' && p.type !== state.filterType) return false;
+
+  const st = procOf(p.id).status;
+  if (state.filterStatus === 'running' && !isRunning(st)) return false;
+  if (state.filterStatus === 'stopped' && isRunning(st)) return false;
+
+  if (!text || groupHit) return true;
+  return [p.name, p.path, p.typeLabel, p.description, p.subPath]
+    .some((v) => (v || '').toLowerCase().includes(text));
+}
+
+/** Grup, kendisi ya da icindeki herhangi bir uygulama favoriyse favori sayilir. */
+function isFavoriteCard(card) {
+  if (state.favorites.has(card.id)) return true;
+  return card.kind === 'group' && card.children.some((p) => state.favorites.has(p.id));
+}
+
+function favoritesFirst(aFav, bFav, aName, bName) {
+  if (aFav !== bFav) return aFav ? -1 : 1;
+  return aName.localeCompare(bName, 'tr');
+}
+
+/** Projeleri kartlara donusturur: dogrudan kok altindakiler tekli, ic icedekiler grup. */
+function visibleCards() {
   const text = state.filterText.trim().toLowerCase();
-  return state.projects.filter((p) => {
-    if (p.hidden && !state.showHidden) return false;
-    if (state.filterType !== 'all' && p.type !== state.filterType) return false;
+  const cards = [];
+  const groups = new Map();
 
-    const st = procOf(p.id).status;
-    if (state.filterStatus === 'running' && !(st === 'running' || st === 'starting')) return false;
-    if (state.filterStatus === 'stopped' && (st === 'running' || st === 'starting')) return false;
+  for (const p of state.projects) {
+    if (!p.groupId) {
+      if (projectMatches(p, text, false)) cards.push({ kind: 'single', id: p.id, name: p.name, project: p });
+      continue;
+    }
+    if (!groups.has(p.groupId)) {
+      groups.set(p.groupId, {
+        kind: 'group', id: p.groupId, name: p.groupName, path: p.groupPath, members: []
+      });
+    }
+    groups.get(p.groupId).members.push(p);
+  }
 
-    if (!text) return true;
-    return (
-      p.name.toLowerCase().includes(text) ||
-      p.path.toLowerCase().includes(text) ||
-      (p.typeLabel || '').toLowerCase().includes(text) ||
-      (p.description || '').toLowerCase().includes(text)
-    );
-  });
+  for (const g of groups.values()) {
+    const groupHit = Boolean(text) &&
+      (g.name.toLowerCase().includes(text) || g.path.toLowerCase().includes(text));
+    // favoriler, sonra klasorun kendi start.cmd'si, sonra ada gore
+    g.children = g.members
+      .filter((p) => projectMatches(p, text, groupHit))
+      .sort((a, b) => {
+        const aFav = state.favorites.has(a.id);
+        const bFav = state.favorites.has(b.id);
+        if (aFav === bFav && Boolean(a.isGroupRoot) !== Boolean(b.isGroupRoot)) {
+          return a.isGroupRoot ? -1 : 1;
+        }
+        return favoritesFirst(aFav, bFav, a.name, b.name);
+      });
+    if (g.children.length) cards.push(g);
+  }
+
+  return cards.sort((a, b) => favoritesFirst(isFavoriteCard(a), isFavoriteCard(b), a.name, b.name));
+}
+
+const CARD_MIN_WIDTH = 330;
+const GRID_GAP = 14;
+let lastColumnCount = 0;
+
+function columnCount() {
+  const grid = $('#grid');
+  const style = getComputedStyle(grid);
+  const inner = grid.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  return Math.max(1, Math.floor((inner + GRID_GAP) / (CARD_MIN_WIDTH + GRID_GAP)));
+}
+
+/**
+ * Kartlari sirayla o an en kisa sutuna yerlestirir. Siralama (favoriler once)
+ * ust satirlarda korunur, farkli yukseklikteki kartlar arasinda bosluk kalmaz.
+ */
+function layoutCards(nodes) {
+  const grid = $('#grid');
+  grid.textContent = '';
+  lastColumnCount = columnCount();
+
+  const cols = Array.from({ length: lastColumnCount }, () => el('div', 'grid-col'));
+  grid.append(...cols);
+  const heights = cols.map(() => 0);
+
+  for (const node of nodes) {
+    const i = heights.indexOf(Math.min(...heights));
+    cols[i].append(node);
+    heights[i] = cols[i].offsetHeight;
+  }
 }
 
 function render() {
   const grid = $('#grid');
-  grid.textContent = '';
-  const items = visibleProjects();
-
-  for (const project of items) grid.append(buildCard(project));
+  const cards = visibleCards();
 
   const noProjects = state.projects.length === 0;
   $('#empty').classList.toggle('hidden', !noProjects);
   grid.classList.toggle('hidden', noProjects);
 
-  const runningCount = state.projects.filter((p) => {
-    const s = procOf(p.id).status;
-    return s === 'running' || s === 'starting';
-  }).length;
+  layoutCards(cards.map((card) =>
+    card.kind === 'group' ? buildGroupCard(card) : buildSingleCard(card)
+  ));
+
+  const runningCount = state.projects.filter((p) => isRunning(procOf(p.id).status)).length;
+  const shown = cards.reduce((n, c) => n + (c.kind === 'group' ? c.children.length : 1), 0);
 
   $('#subtitle').textContent =
-    `${state.projects.length} proje bulundu · ${runningCount} calisiyor · ${items.length} gosteriliyor`;
+    `${state.projects.length} proje bulundu · ${runningCount} calisiyor · ${shown} gosteriliyor`;
+
+  const allCollapsed = cards.length > 0 && cards.every((c) => state.collapsed.has(c.id));
+  const collapseAll = $('#btn-collapse-all');
+  collapseAll.textContent = allCollapsed ? '▾ Tumunu Genislet' : '▸ Tumunu Daralt';
+  collapseAll.dataset.mode = allCollapsed ? 'expand' : 'collapse';
 
   refreshTypeFilter();
+}
+
+/* ------------------------- favori ve daraltma -------------------------- */
+
+function applyCardPrefs(cfg) {
+  if (!cfg) return;
+  state.favorites = new Set(cfg.favorites || []);
+  state.collapsed = new Set(cfg.collapsed || []);
+}
+
+async function loadCardPrefs() {
+  applyCardPrefs(await guard(api.config.get()));
+}
+
+// Arayuz aninda guncellenir; main'in dondurdugu config ile tekrar esitlenir.
+async function toggleFavorite(key) {
+  if (state.favorites.has(key)) state.favorites.delete(key);
+  else state.favorites.add(key);
+  render();
+  const cfg = await guard(api.config.toggleFavorite(key));
+  if (cfg) applyCardPrefs(cfg);
+  else await loadCardPrefs();
+  render();
+}
+
+async function setCollapsed(keys, collapsed) {
+  for (const key of keys) {
+    if (collapsed) state.collapsed.add(key);
+    else state.collapsed.delete(key);
+  }
+  render();
+  const cfg = await guard(api.config.setCollapsed(keys, collapsed));
+  if (cfg) applyCardPrefs(cfg);
+  else await loadCardPrefs();
+  render();
+}
+
+function toggleCollapsed(key) {
+  return setCollapsed([key], !state.collapsed.has(key));
 }
 
 function refreshTypeFilter() {
@@ -224,7 +496,7 @@ function appendLogLine(entry) {
 
 async function openLog(project) {
   state.activeLog = project.id;
-  $('#log-title').textContent = `Log — ${project.name}`;
+  $('#log-title').textContent = `Log — ${displayName(project)}`;
   $('#logpanel').classList.remove('hidden');
   const body = $('#log-body');
   body.textContent = '';
@@ -239,7 +511,7 @@ let settingsTarget = null;
 
 function openSettings(project) {
   settingsTarget = project;
-  $('#settings-title').textContent = `Ayarlar — ${project.name}`;
+  $('#settings-title').textContent = `Ayarlar — ${displayName(project)}`;
   $('#settings-hide').textContent = project.hidden ? 'Listede Goster' : 'Listeden Gizle';
   $('#settings-path').textContent = `${project.path}  ·  algilanan tip: ${project.typeLabel}`;
   $('#f-name').value = project.name || '';
@@ -318,6 +590,7 @@ async function scan() {
   const list = await guard(api.projects.scan());
   if (list) state.projects = list;
   state.procs = (await guard(api.proc.states())) || {};
+  await loadCardPrefs();
   render();
 }
 
@@ -338,6 +611,10 @@ function bindUi() {
   });
 
   $('#btn-scan').onclick = scan;
+  $('#btn-collapse-all').onclick = (e) => {
+    const keys = visibleCards().map((c) => c.id);
+    setCollapsed(keys, e.currentTarget.dataset.mode !== 'expand');
+  };
   $('#btn-stop-all').onclick = async () => {
     await guard(api.proc.stopAll());
     toast('Calisan tum projeler durduruldu.');
@@ -419,6 +696,11 @@ function bindUi() {
       e.preventDefault();
       $('#search').focus();
     }
+  });
+
+  // Pencere genisligi sutun sayisini degistirdiginde yeniden yerlestir.
+  window.addEventListener('resize', () => {
+    if (columnCount() !== lastColumnCount) render();
   });
 
   api.on.state((s) => {

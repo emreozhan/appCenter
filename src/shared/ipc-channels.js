@@ -14,6 +14,8 @@ const CH = {
   CONFIG_SET_OVERRIDE: 'config:set-override',
   CONFIG_RESET_OVERRIDE: 'config:reset-override',
   CONFIG_TOGGLE_HIDDEN: 'config:toggle-hidden',
+  CONFIG_TOGGLE_FAVORITE: 'config:toggle-favorite',
+  CONFIG_SET_COLLAPSED: 'config:set-collapsed',
   STARTUP_GET: 'startup:get',
   STARTUP_SET: 'startup:set',
 

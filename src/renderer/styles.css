@@ -81,14 +81,22 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .btn.icon { padding: 6px 9px; }
 
 /* ------------------------------- grid ------------------------------- */
+/* Masonry: kartlar app.js tarafindan en kisa sutuna yerlestirilir,
+   boylece acik bir kartin yanindaki daraltilmis kartlar bosluk birakmaz. */
 .grid {
   flex: 1;
   overflow-y: auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  display: flex;
+  align-items: flex-start;
   gap: 14px;
   padding: 18px 20px 28px;
-  align-content: start;
+}
+.grid-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .card {
@@ -109,8 +117,55 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 
 .card-head { display: flex; align-items: flex-start; gap: 10px; }
 .card-icon { font-size: 20px; line-height: 1.2; }
+.card-titlebox { flex: 1; min-width: 0; }
 .card-title { font-weight: 600; font-size: 15px; word-break: break-word; }
+.card-title.clickable { cursor: pointer; }
+.card-title.clickable:hover { color: #fff; }
 .card-sub { font-size: 11px; color: var(--muted); word-break: break-all; }
+
+/* baslik ikon butonlari: daralt/genislet ve favori */
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1.2;
+  padding: 1px 4px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.icon-btn:hover { color: var(--text); background: #262c3a; }
+.icon-btn.chevron { width: 22px; text-align: center; }
+.icon-btn.star.on { color: var(--amber); }
+.icon-btn.star.on:hover { color: #ffcb6b; }
+
+/* daraltilmis kart: yalnizca baslik satiri */
+.card.collapsed { padding: 9px 12px; }
+.card.collapsed .card-head { align-items: center; min-height: 30px; }
+.card.collapsed .card-sub { display: none; }
+.card.collapsed .card-title { font-size: 14px; }
+.card.collapsed .card-icon { font-size: 17px; }
+
+.card.favorite { box-shadow: inset 3px 0 0 var(--amber); }
+
+/* grup karti ve icindeki uygulamalar */
+.sub-list { display: flex; flex-direction: column; gap: 8px; }
+.sub {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sub.running { border-color: rgba(62, 207, 142, .45); }
+.sub.error { border-color: rgba(255, 107, 107, .45); }
+.sub.busy { border-color: rgba(245, 181, 68, .45); }
+.sub .card-title { font-size: 14px; }
+.sub .card-icon { font-size: 17px; }
+.sub .card-actions { padding-top: 0; }
 
 .badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .badge {

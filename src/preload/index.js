@@ -22,7 +22,9 @@ contextBridge.exposeInMainWorld('appCenter', {
     removeRoot: (dir) => invoke('config:remove-root', dir),
     setOverride: (id, patch) => invoke('config:set-override', id, patch),
     resetOverride: (id) => invoke('config:reset-override', id),
-    toggleHidden: (id) => invoke('config:toggle-hidden', id)
+    toggleHidden: (id) => invoke('config:toggle-hidden', id),
+    toggleFavorite: (key) => invoke('config:toggle-favorite', key),
+    setCollapsed: (keys, collapsed) => invoke('config:set-collapsed', keys, collapsed)
   },
   startup: {
     get: () => invoke('startup:get'),
