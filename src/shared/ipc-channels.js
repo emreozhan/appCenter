@@ -31,6 +31,11 @@ const CH = {
   PROC_LOGS: 'proc:logs',
   PROC_CLEAR_LOGS: 'proc:clear-logs',
 
+  GIT_STATUS: 'git:status',
+  GIT_STATUS_ALL: 'git:status-all',
+  GIT_COMMIT: 'git:commit',
+  GIT_PUSH: 'git:push',
+
   SHELL_OPEN_FOLDER: 'shell:open-folder',
   SHELL_OPEN_URL: 'shell:open-url',
   SHELL_OPEN_TERMINAL: 'shell:open-terminal',

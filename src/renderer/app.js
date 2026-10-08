@@ -13,7 +13,9 @@ const state = {
   /** favori kart kimlikleri (proje id'si ya da grup id'si) */
   favorites: new Set(),
   /** daraltilmis kart kimlikleri */
-  collapsed: new Set()
+  collapsed: new Set(),
+  /** proje id -> git durumu (main/git.js status() ciktisi) */
+  git: {}
 };
 
 /* ----------------------------- yardimcilar ----------------------------- */
@@ -108,12 +110,53 @@ function collapseButton(key) {
   );
 }
 
+function gitTooltip(info) {
+  const lines = [
+    `Depo: ${info.root}${info.nested ? ' (ust klasorun deposu, kapsam bu klasor)' : ''}`,
+    `Dal: ${info.branch || '?'}`,
+    info.upstream
+      ? `Upstream: ${info.upstream}`
+      : info.remotes.length
+        ? `Remote: ${info.remotes.join(', ')} (upstream ayarlanmamis)`
+        : 'Remote yok (yalnizca yerel)',
+    info.changed ? `${info.changed} degisiklik` : 'Degisiklik yok'
+  ];
+  if (info.ahead) lines.push(`${info.ahead} commit push bekliyor`);
+  if (info.behind) lines.push(`${info.behind} commit geride (son fetch'e gore)`);
+  return lines.join('\n');
+}
+
+/** Basliktaki git rozeti: "git yok" ya da "⎇ dal ±degisiklik ↑ileri ↓geri". */
+function gitChip(project) {
+  const info = state.git[project.id];
+  if (!info) return null;
+
+  if (!info.isRepo) {
+    const chip = el('span', 'git-chip none', 'git yok');
+    chip.title = 'Bu klasor bir git deposunda degil';
+    return chip;
+  }
+  if (info.error) {
+    const chip = el('span', 'git-chip error', 'git ?');
+    chip.title = info.error;
+    return chip;
+  }
+
+  let text = `⎇ ${info.branch || '?'}`;
+  if (info.changed) text += ` ±${info.changed}`;
+  if (info.ahead) text += ` ↑${info.ahead}`;
+  if (info.behind) text += ` ↓${info.behind}`;
+  const chip = el('span', `git-chip ${info.changed ? 'dirty' : 'clean'}`, text);
+  chip.title = gitTooltip(info);
+  return chip;
+}
+
 /**
  * Kart ya da alt oge basligi.
  * @param {{collapseKey?: string, favoriteKey: string, icon: string, title: string,
- *          sub?: string, status: HTMLElement, extra?: HTMLElement}} opts
+ *          chip?: HTMLElement|null, sub?: string, status: HTMLElement, extra?: HTMLElement}} opts
  */
-function headNode({ collapseKey, favoriteKey, icon, title, sub, status, extra }) {
+function headNode({ collapseKey, favoriteKey, icon, title, chip, sub, status, extra }) {
   const head = el('div', 'card-head');
   if (collapseKey) head.append(collapseButton(collapseKey));
   head.append(el('span', 'card-icon', icon || '\u{1F4E6}'));
@@ -124,7 +167,10 @@ function headNode({ collapseKey, favoriteKey, icon, title, sub, status, extra })
     titleNode.classList.add('clickable');
     titleNode.onclick = () => toggleCollapsed(collapseKey);
   }
-  titleBox.append(titleNode);
+  const titleLine = el('div', 'card-titleline');
+  titleLine.append(titleNode);
+  if (chip) titleLine.append(chip);
+  titleBox.append(titleLine);
   if (sub) titleBox.append(el('div', 'card-sub', sub));
   head.append(titleBox);
 
@@ -198,6 +244,29 @@ function actionsNode(project) {
     actions.append(openBtn);
   }
 
+  const gitInfo = state.git[project.id];
+  if (gitInfo?.isRepo && !gitInfo.error) {
+    const commitBtn = el('button', 'btn', gitInfo.changed ? `✔ Commit (${gitInfo.changed})` : '✔ Commit');
+    commitBtn.disabled = busy || !gitInfo.changed;
+    commitBtn.title = gitInfo.changed ? 'Degisiklikleri commit et' : 'Commit edilecek degisiklik yok';
+    commitBtn.onclick = () => openCommit(project);
+    actions.append(commitBtn);
+
+    const hasRemote = gitInfo.remotes.length > 0;
+    const upToDate = Boolean(gitInfo.upstream) && gitInfo.ahead === 0;
+    const pushBtn = el('button', 'btn', gitInfo.ahead ? `⇡ Push (${gitInfo.ahead})` : '⇡ Push');
+    pushBtn.disabled = busy || !hasRemote || upToDate;
+    pushBtn.title = !hasRemote
+      ? 'Remote tanimli degil'
+      : upToDate
+        ? 'Gonderilecek commit yok'
+        : gitInfo.upstream
+          ? `${gitInfo.upstream} dalina gonder`
+          : 'Remote\'a gonder (upstream ayarlanir)';
+    pushBtn.onclick = () => pushProject(project);
+    actions.append(pushBtn);
+  }
+
   const logBtn = el('button', 'btn icon', '\u{1F4C4}');
   logBtn.title = 'Log';
   logBtn.onclick = () => openLog(project);
@@ -239,6 +308,7 @@ function buildSingleCard(card) {
     favoriteKey: project.id,
     icon: project.icon,
     title: project.name,
+    chip: gitChip(project),
     sub: project.path,
     status: projectStatusNode(project),
     extra: collapsed ? runButton(project, true) : null
@@ -262,6 +332,7 @@ function buildSubItem(project) {
     favoriteKey: project.id,
     icon: project.icon,
     title: project.name,
+    chip: gitChip(project),
     sub: project.subPath !== project.name ? project.subPath : '',
     status: projectStatusNode(project)
   }));
@@ -549,6 +620,113 @@ async function saveSettings() {
   closeSettings();
 }
 
+/* --------------------------------- git --------------------------------- */
+
+const GIT_FOCUS_REFRESH_MS = 15000;
+let gitRefreshing = false;
+let lastGitRefresh = 0;
+
+async function refreshAllGit() {
+  if (gitRefreshing) return;
+  gitRefreshing = true;
+  try {
+    const all = await guard(api.git.statusAll());
+    if (all) {
+      state.git = all;
+      render();
+    }
+    lastGitRefresh = Date.now();
+  } finally {
+    gitRefreshing = false;
+  }
+}
+
+/** Ayni depoyu paylasan kartlari tazeler (ic ice projeler tek depoda olabilir). */
+async function refreshGitForRoot(root) {
+  if (!root) return;
+  const ids = state.projects.filter((p) => state.git[p.id]?.root === root).map((p) => p.id);
+  const infos = await Promise.all(ids.map((id) => guard(api.git.status(id))));
+  ids.forEach((id, i) => {
+    if (infos[i]) state.git[id] = infos[i];
+  });
+  render();
+}
+
+async function applyGitResult(project, res, okMessage) {
+  if (res.status) state.git[project.id] = res.status;
+  toast(res.ok ? okMessage : res.error, !res.ok);
+  await refreshGitForRoot(res.status?.root);
+}
+
+let commitTarget = null;
+
+async function openCommit(project) {
+  const info = await guard(api.git.status(project.id));
+  if (!info) return;
+  state.git[project.id] = info;
+  render();
+  if (!info.isRepo || info.error) {
+    toast(info.error || 'Git deposu degil', true);
+    return;
+  }
+  if (!info.changed) {
+    toast('Commit edilecek degisiklik yok.');
+    return;
+  }
+
+  commitTarget = project;
+  $('#git-title').textContent = `Commit — ${displayName(project)}`;
+  const scope = info.nested ? ` · kapsam yalnizca bu klasor (depo: ${info.root})` : '';
+  $('#git-info').textContent = `Dal: ${info.branch} · ${info.changed} degisiklik${scope}`;
+
+  const list = $('#git-files');
+  list.textContent = '';
+  for (const file of info.files) {
+    const li = el('li');
+    li.append(el('span', 'git-code', file.code));
+    li.append(el('span', null, file.path));
+    list.append(li);
+  }
+  if (info.changed > info.files.length) {
+    list.append(el('li', 'muted', `... ve ${info.changed - info.files.length} dosya daha`));
+  }
+
+  const pushBox = $('#git-push');
+  pushBox.checked = false;
+  pushBox.disabled = info.remotes.length === 0;
+  $('#git-push-label').title = pushBox.disabled ? 'Remote tanimli degil' : '';
+  $('#git-message').value = '';
+  $('#git-modal').classList.remove('hidden');
+  $('#git-message').focus();
+}
+
+function closeCommit() {
+  commitTarget = null;
+  $('#git-modal').classList.add('hidden');
+}
+
+async function submitCommit() {
+  if (!commitTarget) return;
+  const message = $('#git-message').value.trim();
+  if (!message) {
+    toast('Commit mesaji yaz.', true);
+    $('#git-message').focus();
+    return;
+  }
+  const project = commitTarget;
+  const alsoPush = $('#git-push').checked;
+  closeCommit();
+  openLog(project);
+  const res = await guard(api.git.commit(project.id, message, alsoPush));
+  if (res) await applyGitResult(project, res, alsoPush ? 'Commit ve push tamam.' : 'Commit tamam.');
+}
+
+async function pushProject(project) {
+  openLog(project);
+  const res = await guard(api.git.push(project.id));
+  if (res) await applyGitResult(project, res, 'Push tamam.');
+}
+
 /* ------------------------------ kok klasor ------------------------------ */
 
 async function renderRoots() {
@@ -592,6 +770,8 @@ async function scan() {
   state.procs = (await guard(api.proc.states())) || {};
   await loadCardPrefs();
   render();
+  // git durumu kartlari bekletmeden arkadan gelir
+  refreshAllGit();
 }
 
 /* ------------------------------- baglama ------------------------------- */
@@ -634,6 +814,20 @@ function bindUi() {
     await guard(api.config.pickRoot());
     await scan();
   };
+
+  $('#git-cancel').onclick = closeCommit;
+  $('#git-commit').onclick = submitCommit;
+  $('#git-message').addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'Enter') {
+      e.preventDefault();
+      submitCommit();
+    }
+  });
+
+  // Terminalden yapilan commit'ler de yansisin: pencereye donuldugunde tazele.
+  window.addEventListener('focus', () => {
+    if (Date.now() - lastGitRefresh > GIT_FOCUS_REFRESH_MS) refreshAllGit();
+  });
 
   $('#settings-cancel').onclick = closeSettings;
   $('#settings-save').onclick = saveSettings;
@@ -687,6 +881,7 @@ function bindUi() {
     if (e.key === 'Escape') {
       $('#settings-modal').classList.add('hidden');
       $('#roots-modal').classList.add('hidden');
+      closeCommit();
     }
     if (e.key === 'F5' || (e.ctrlKey && e.key.toLowerCase() === 'r')) {
       e.preventDefault();

@@ -44,6 +44,12 @@ contextBridge.exposeInMainWorld('appCenter', {
     logs: (id) => invoke('proc:logs', id),
     clearLogs: (id) => invoke('proc:clear-logs', id)
   },
+  git: {
+    status: (id) => invoke('git:status', id),
+    statusAll: () => invoke('git:status-all'),
+    commit: (id, message, alsoPush) => invoke('git:commit', id, message, alsoPush),
+    push: (id) => invoke('git:push', id)
+  },
   shell: {
     openFolder: (id) => invoke('shell:open-folder', id),
     openUrl: (url) => invoke('shell:open-url', url),

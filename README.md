@@ -37,6 +37,25 @@ npm start
 | **Grup kartları** | Kök klasörün doğrudan altında olmayan (iç içe) projeler, üst klasörlerinin tek kartında toplanır — ör. `homeTool` kartı içinde `yeelight-controller` ve `CodeOnlyWindowsApplication`. Her alt uygulamanın kendi Başlat/Build/Log butonları vardır. |
 | **Başlangıçta aç** | İşaretlendiğinde App Center, Windows oturumu açıldığında otomatik başlar (`HKCU\...\CurrentVersion\Run`). Kaydı Electron'un `setLoginItemSettings` API'si yönetir; kapatınca kayıt silinir. Paketlenmemiş çalışırken kayıt `electron.exe "<proje klasörü>"` şeklindedir, yani `node_modules` durduğu sürece geçerlidir. |
 
+### Git
+
+Her kartın başlığında projenin git durumu görünür (daraltılmış kartta da):
+
+| Rozet | Anlamı |
+|---|---|
+| `⎇ main` (yeşil) | Depo var, değişiklik yok |
+| `⎇ main ±5` (sarı) | 5 dosyada commit edilmemiş değişiklik |
+| `↑2` / `↓1` | 2 commit push bekliyor / 1 commit geride (son `fetch`'e göre; App Center kendiliğinden fetch yapmaz) |
+| `git yok` | Klasör bir git deposunda değil |
+
+Rozetin üzerine gelince depo kökü, upstream ve remote bilgisi görünür. Kart genişletildiğinde **✔ Commit** ve **⇡ Push** butonları çıkar:
+
+- **Commit**, değişen dosyaları listeleyen bir pencere açar. Mesaj yazılıp Commit'e basılınca (veya Ctrl+Enter) `git add -A -- .` ve `git commit -- .` çalışır. İstenirse ardından push da yapılır.
+- Kapsam her zaman **o projenin klasörüdür**. Üst klasörün deposunu paylaşan iç içe projelerde (ör. `home-inventory/frontend`) yalnızca o alt klasördeki değişiklikler commit'lenir. Depoda başka yerde stage'lenmiş dosyalar bu commit'e girmez.
+- **Push**, upstream varsa `git push`, yoksa `git push -u origin HEAD` çalıştırır. Remote tanımlı değilse ya da gönderilecek commit yoksa buton pasiftir.
+- Commit kimliği deponun/kullanıcının git ayarından gelir. Çıktılar proje log panelinde görünür.
+- Git durumu tarama sonrası ve pencereye geri dönüldüğünde (en sık 15 sn'de bir) tazelenir. Terminalden yapılan commit'ler böylece yansır.
+
 Statik HTML projeleri (ör. `m3u-player`) için ayrı bir sunucuya gerek yok — uygulama boş bir porta dahili bir HTTP sunucusu açar ve adresi verir.
 
 Kısayollar: `Ctrl+F` arama, `F5` / `Ctrl+R` yeniden tara, `Esc` açık pencereyi kapat.
@@ -77,6 +96,7 @@ src/
 │   ├── scanner.js        # kök klasörleri gezme
 │   ├── processManager.js # spawn / kill / log / durum
 │   ├── staticServer.js   # statik projeler için dahili HTTP
+│   ├── git.js            # git durumu, kapsamlı commit, push (shell'siz execFile)
 │   └── ipc/handlers.js   # tüm ipcMain.handle kanalları
 ├── preload/index.js      # contextBridge ile sınırlı API
 ├── renderer/             # UI (Node erişimi yok)

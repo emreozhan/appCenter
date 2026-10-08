@@ -8,6 +8,44 @@ const config = require('../config');
 const { scan } = require('../scanner');
 const pm = require('../processManager');
 const startup = require('../startup');
+const gitOps = require('../git');
+
+const GIT_CONCURRENCY = 6;
+const MAX_COMMIT_MESSAGE = 5000;
+
+/** fn'i ayni anda en fazla `limit` oge icin calistirir; sirayi korur. */
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+/**
+ * Git islemini projenin "mesgul" durumu ve log paneliyle sarar.
+ * Ayni projede build/kurulum surerken baslatilmaz.
+ */
+async function runGitTask(project, label, fn) {
+  const id = project.id;
+  if (pm.state(id).task) throw new Error('Bu projede baska bir islem suruyor');
+  pm.patch(id, { task: 'git', taskLabel: `${label} calisiyor` });
+  const log = (kind, text) => pm.log(id, kind, text);
+  try {
+    const res = await fn(log);
+    if (!res.ok) log('err', res.error);
+    pm.patch(id, { task: null, taskLabel: res.ok ? `${label} tamam` : `${label} basarisiz` });
+    return { ...res, status: await gitOps.status(project.path) };
+  } catch (err) {
+    pm.patch(id, { task: null, taskLabel: `${label} hatasi` });
+    throw err;
+  }
+}
 
 /** Son taramanin sonucu; id -> proje. Renderer'dan gelen id'ler buradan dogrulanir. */
 const projects = new Map();
@@ -117,6 +155,35 @@ function register(getWindow) {
   ipcMain.handle(CH.PROC_CLEAR_LOGS, (_e, id) => {
     pm.clearLogs(requireProject(id).id);
     return true;
+  });
+
+  /* ----------------------------- git ---------------------------- */
+  ipcMain.handle(CH.GIT_STATUS, (_e, id) => gitOps.status(requireProject(id).path));
+
+  ipcMain.handle(CH.GIT_STATUS_ALL, async () => {
+    const all = list();
+    const infos = await mapLimit(all, GIT_CONCURRENCY, (p) => gitOps.status(p.path));
+    return Object.fromEntries(all.map((p, i) => [p.id, infos[i]]));
+  });
+
+  ipcMain.handle(CH.GIT_COMMIT, (_e, id, message, alsoPush) => {
+    const p = requireProject(id);
+    const msg = typeof message === 'string' ? message.trim() : '';
+    if (!msg) throw new Error('Commit mesaji bos olamaz');
+    if (msg.length > MAX_COMMIT_MESSAGE) throw new Error('Commit mesaji cok uzun');
+    const withPush = alsoPush === true;
+
+    return runGitTask(p, withPush ? 'Commit + push' : 'Commit', async (log) => {
+      const committed = await gitOps.commit(p.path, msg, log);
+      if (!committed.ok || !withPush) return committed;
+      const pushed = await gitOps.push(p.path, log);
+      return pushed.ok ? pushed : { ok: false, error: `Commit yapildi, push basarisiz: ${pushed.error}` };
+    });
+  });
+
+  ipcMain.handle(CH.GIT_PUSH, (_e, id) => {
+    const p = requireProject(id);
+    return runGitTask(p, 'Push', (log) => gitOps.push(p.path, log));
   });
 
   /* ---------------------------- shell --------------------------- */

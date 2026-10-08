@@ -93,6 +93,25 @@
     </div>
   </div>
 
+  <!-- Git commit -->
+  <div id="git-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="git-title">Commit</h2>
+      <p class="muted" id="git-info"></p>
+      <ul id="git-files" class="git-files"></ul>
+      <label>Commit mesaji<textarea id="git-message" rows="3" placeholder="Ne degisti?"></textarea></label>
+      <label class="checkbox inline" id="git-push-label">
+        <input type="checkbox" id="git-push" /> Commit sonrasi push et
+      </label>
+      <div class="modal-actions">
+        <span class="muted">Ctrl+Enter ile commit</span>
+        <div class="spacer"></div>
+        <button id="git-cancel" class="btn">Vazgec</button>
+        <button id="git-commit" class="btn primary">Commit</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
   <script src="app.js"></script>

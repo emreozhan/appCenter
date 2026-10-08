@@ -118,6 +118,40 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .card-head { display: flex; align-items: flex-start; gap: 10px; }
 .card-icon { font-size: 20px; line-height: 1.2; }
 .card-titlebox { flex: 1; min-width: 0; }
+.card-titleline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+
+/* git rozeti */
+.git-chip {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: default;
+}
+.git-chip.clean { color: var(--green); border-color: rgba(62, 207, 142, .35); }
+.git-chip.dirty { color: var(--amber); border-color: rgba(245, 181, 68, .4); }
+.git-chip.error { color: var(--red); border-color: rgba(255, 107, 107, .4); }
+.git-chip.none { opacity: .7; }
+
+.git-files {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+.git-files li { display: flex; gap: 10px; padding: 1px 0; word-break: break-all; }
+.git-code { color: var(--amber); white-space: pre; min-width: 2ch; }
+.modal-card label.checkbox.inline { flex-direction: row; align-items: center; gap: 6px; }
 .card-title { font-weight: 600; font-size: 15px; word-break: break-word; }
 .card-title.clickable { cursor: pointer; }
 .card-title.clickable:hover { color: #fff; }
