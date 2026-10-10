@@ -16,14 +16,14 @@ It was built for a folder full of AI-generated side projects, each with its own 
 - **Built-in static server** – plain HTML projects are served on a free local port, no extra tooling needed.
 - **Git status on every card** – branch, number of changed files, commits ahead/behind, or "no repository".
 - **Commit & push** – commit dialog with the list of changed files; optional push afterwards.
-- **Organising** – search, filter by status/type, favourites (pinned to the top), collapsible cards, hidden projects, and group cards for nested projects.
+- **Organising** – a separate Favourites section, drag & drop ordering, search, filter by status/type, collapsible cards, hidden projects, and group cards for nested projects.
 - **Launch at login** – optional Windows auto-start.
 
 ## Requirements
 
 - Windows 10/11 (process handling uses `cmd.exe` and `taskkill`)
 - [Node.js](https://nodejs.org/) with npm (developed and tested with Node.js 22)
-- Git on `PATH` – optional, only needed for the git features
+- [Git for Windows](https://git-scm.com/download/win) – optional, only needed for the git features. It is looked up on `PATH` first, then in the Git installation that malformed `PATH` entries point to (e.g. `...\Git\git-bash.exe`), then in the default install folders
 
 ## Getting Started
 
@@ -49,10 +49,19 @@ Each detected project gets a card:
 | ✔ Commit / ⇡ Push | Git commit dialog / push |
 | 📄 📁 >_ | Log panel, open folder in Explorer, open a terminal in the folder |
 | ⚙ | Override name, install/build/run commands and environment variables. Clearing a field returns to the detected value |
-| ☆ | Favourite – favourites are listed first |
+| ☆ | Favourite – moves the card to the end of the **★ Favoriler** section |
 | ▾ / ▸ | Collapse the card to a single line (a small ▶/■ button stays visible) |
 
 Keyboard: `Ctrl+F` search, `F5` / `Ctrl+R` rescan, `Esc` close dialogs, `Ctrl+Enter` commit.
+
+### Sections and ordering
+
+Cards are split into two sections: **★ Favoriler** (favourites) and **Uygulamalar** (all other apps). Drag a card by its header to reorder it:
+
+- Dropping on the upper half of another card puts it in that card's place, the lower half puts it after it. Dropping on an empty area of a section moves it to the end.
+- Dragging a card into the other section adds it to or removes it from the favourites. When there are no favourites yet, an empty "drop here" area appears at the top while dragging.
+- Apps inside a group card can be reordered within their group.
+- The order is saved and survives restarts. Cards that were never moved keep alphabetical order after the ordered ones.
 
 ### Nested projects
 
@@ -87,7 +96,7 @@ The detected project type is kept in every case. Folders recognised as a project
 
 ## Configuration
 
-Settings are stored in `%APPDATA%\app-center\config.json`: root folders, per-project command overrides, hidden projects, favourites, collapsed cards and the scan depth (`maxDepth`, default 3).
+Settings are stored in `%APPDATA%\app-center\config.json`: root folders, per-project command overrides, hidden projects, favourites, collapsed cards, the drag & drop order and the scan depth (`maxDepth`, default 3).
 
 "Launch at login" is stored by Windows (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`) through Electron's `setLoginItemSettings`. When running from source the entry points to `electron.exe "<app folder>"`, so it keeps working only while `node_modules` is present.
 

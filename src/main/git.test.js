@@ -30,6 +30,23 @@ function write(dir, files) {
 
 const noLog = () => {};
 
+test('git.exe, PATH bozuk yazilmis olsa da bulunur', { skip: process.platform !== 'win32' }, (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'appcenter gitbin '));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const install = path.join(root, 'Git');
+  write(install, { 'cmd/git.exe': '', 'git-bash.exe': '' });
+  const expected = path.join(install, 'cmd', 'git.exe');
+  const missing = path.join(root, 'yok');
+
+  // PATH'te git-bash.exe dosyasi ya da Git kok klasoru yazili (kullanicida gorulen durum)
+  assert.equal(gitOps.findGit({ PATH: `${missing};${path.join(install, 'git-bash.exe')}` }), expected);
+  assert.equal(gitOps.findGit({ PATH: `"${install}"` }), expected);
+  // PATH'te hic yok, bilinen kurulum yerinde var
+  assert.equal(gitOps.findGit({ PATH: missing, ProgramFiles: root }), expected);
+  // hicbir yerde yok
+  assert.equal(gitOps.findGit({ PATH: missing }), null);
+});
+
 test('porcelain v2 ciktisi ozetlenir (bosluklu yol, yeniden adlandirma, ileri/geri)', () => {
   const info = gitOps.parseStatus([
     '# branch.oid abc',

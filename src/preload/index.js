@@ -23,7 +23,8 @@ contextBridge.exposeInMainWorld('appCenter', {
     setOverride: (id, patch) => invoke('config:set-override', id, patch),
     resetOverride: (id) => invoke('config:reset-override', id),
     toggleHidden: (id) => invoke('config:toggle-hidden', id),
-    toggleFavorite: (key) => invoke('config:toggle-favorite', key),
+    setFavorites: (keys, favorite) => invoke('config:set-favorites', keys, favorite),
+    setOrder: (keys) => invoke('config:set-order', keys),
     setCollapsed: (keys, collapsed) => invoke('config:set-collapsed', keys, collapsed)
   },
   startup: {

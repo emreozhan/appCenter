@@ -15,7 +15,12 @@ const state = {
   /** daraltilmis kart kimlikleri */
   collapsed: new Set(),
   /** proje id -> git durumu (main/git.js status() ciktisi) */
-  git: {}
+  git: {},
+  /** surukle-birak sirasi (kart ve alt uygulama kimlikleri) ve hizli erisim icin indeksi */
+  order: [],
+  orderIndex: new Map(),
+  /** suren surukleme: {kind: 'card'|'child', id, groupId?} */
+  drag: null
 };
 
 /* ----------------------------- yardimcilar ----------------------------- */
@@ -301,7 +306,6 @@ function buildSingleCard(card) {
   const node = el('article', 'card');
   node.classList.add(proc.task ? 'busy' : proc.status);
   if (collapsed) node.classList.add('collapsed');
-  if (isFavoriteCard(card)) node.classList.add('favorite');
 
   node.append(headNode({
     collapseKey: card.id,
@@ -354,7 +358,6 @@ function buildGroupCard(card) {
   const node = el('article', 'card group');
   node.classList.add(cls);
   if (collapsed) node.classList.add('collapsed');
-  if (isFavoriteCard(card)) node.classList.add('favorite');
 
   const count = `${card.children.length} uygulama`;
   node.append(headNode({
@@ -368,7 +371,11 @@ function buildGroupCard(card) {
   if (collapsed) return node;
 
   const list = el('div', 'sub-list');
-  for (const project of card.children) list.append(buildSubItem(project));
+  for (const project of card.children) {
+    const item = buildSubItem(project);
+    makeChildDraggable(item, project);
+    list.append(item);
+  }
   node.append(list);
   return node;
 }
@@ -392,26 +399,61 @@ function projectMatches(p, text, groupHit) {
     .some((v) => (v || '').toLowerCase().includes(text));
 }
 
-/** Grup, kendisi ya da icindeki herhangi bir uygulama favoriyse favori sayilir. */
+/**
+ * Grup, kendisi ya da icindeki herhangi bir uygulama favoriyse favori sayilir.
+ * Filtreden bagimsizdir (members), kart bolumu aramayla degismez.
+ */
 function isFavoriteCard(card) {
   if (state.favorites.has(card.id)) return true;
-  return card.kind === 'group' && card.children.some((p) => state.favorites.has(p.id));
+  return card.kind === 'group' && card.members.some((p) => state.favorites.has(p.id));
 }
 
-function favoritesFirst(aFav, bFav, aName, bName) {
+/** Surukle-birak sirasindaki yeri; elle siralanmamis olanlar sona. */
+function orderRank(id) {
+  const i = state.orderIndex.get(id);
+  return i === undefined ? Infinity : i;
+}
+
+/**
+ * Alt uygulama sirasi ayri anahtarla tutulur: semsiye klasorun kendi satiri grup kartiyla
+ * ayni kimligi tasir; ayni anahtar kullanilsa grup ici siralama grup kartini da kaydirirdi.
+ */
+const childOrderKey = (id) => `c:${id}`;
+
+/** Once elle verilen sira; sirasi olmayanlar kendi aralarinda `fallback` ile. */
+function byManualOrder(fallback, keyOf = (item) => item.id) {
+  return (a, b) => {
+    const ra = orderRank(keyOf(a));
+    const rb = orderRank(keyOf(b));
+    if (ra !== rb) return ra < rb ? -1 : 1;
+    return fallback(a, b);
+  };
+}
+
+const compareCards = byManualOrder((a, b) => a.name.localeCompare(b.name, 'tr'));
+
+// Elle siralanmamis alt uygulamalar: favoriler, klasorun kendi start.cmd'si, sonra ad.
+const compareChildren = byManualOrder((a, b) => {
+  const aFav = state.favorites.has(a.id);
+  const bFav = state.favorites.has(b.id);
   if (aFav !== bFav) return aFav ? -1 : 1;
-  return aName.localeCompare(bName, 'tr');
-}
+  if (Boolean(a.isGroupRoot) !== Boolean(b.isGroupRoot)) return a.isGroupRoot ? -1 : 1;
+  return a.name.localeCompare(b.name, 'tr');
+}, (p) => childOrderKey(p.id));
 
-/** Projeleri kartlara donusturur: dogrudan kok altindakiler tekli, ic icedekiler grup. */
-function visibleCards() {
-  const text = state.filterText.trim().toLowerCase();
+/**
+ * Projeleri kartlara donusturur: dogrudan kok altindakiler tekli, ic icedekiler grup.
+ * filtered=false iken arama/filtre uygulanmaz; surukle-birak tam listeyi siralar.
+ */
+function buildCards(filtered = true) {
+  const text = filtered ? state.filterText.trim().toLowerCase() : '';
+  const matches = (p, groupHit) => !filtered || projectMatches(p, text, groupHit);
   const cards = [];
   const groups = new Map();
 
   for (const p of state.projects) {
     if (!p.groupId) {
-      if (projectMatches(p, text, false)) cards.push({ kind: 'single', id: p.id, name: p.name, project: p });
+      if (matches(p, false)) cards.push({ kind: 'single', id: p.id, name: p.name, project: p });
       continue;
     }
     if (!groups.has(p.groupId)) {
@@ -425,21 +467,25 @@ function visibleCards() {
   for (const g of groups.values()) {
     const groupHit = Boolean(text) &&
       (g.name.toLowerCase().includes(text) || g.path.toLowerCase().includes(text));
-    // favoriler, sonra klasorun kendi start.cmd'si, sonra ada gore
-    g.children = g.members
-      .filter((p) => projectMatches(p, text, groupHit))
-      .sort((a, b) => {
-        const aFav = state.favorites.has(a.id);
-        const bFav = state.favorites.has(b.id);
-        if (aFav === bFav && Boolean(a.isGroupRoot) !== Boolean(b.isGroupRoot)) {
-          return a.isGroupRoot ? -1 : 1;
-        }
-        return favoritesFirst(aFav, bFav, a.name, b.name);
-      });
+    g.children = g.members.filter((p) => matches(p, groupHit)).sort(compareChildren);
     if (g.children.length) cards.push(g);
   }
 
-  return cards.sort((a, b) => favoritesFirst(isFavoriteCard(a), isFavoriteCard(b), a.name, b.name));
+  return cards.sort(compareCards);
+}
+
+/** Gorunen kartlar, favoriler ve digerleri olarak iki bolume ayrilmis. */
+function visibleSections() {
+  const cards = buildCards(true);
+  return {
+    favorites: cards.filter(isFavoriteCard),
+    others: cards.filter((c) => !isFavoriteCard(c))
+  };
+}
+
+function visibleCards() {
+  const { favorites, others } = visibleSections();
+  return [...favorites, ...others];
 }
 
 const CARD_MIN_WIDTH = 330;
@@ -454,16 +500,14 @@ function columnCount() {
 }
 
 /**
- * Kartlari sirayla o an en kisa sutuna yerlestirir. Siralama (favoriler once)
- * ust satirlarda korunur, farkli yukseklikteki kartlar arasinda bosluk kalmaz.
+ * Kartlari sirayla o an en kisa sutuna yerlestirir. Siralama ust satirlarda korunur,
+ * farkli yukseklikteki kartlar arasinda bosluk kalmaz. Bir kartin onune birakilan kart
+ * tam olarak onun yerini alir (yerlesim, onceki kartlara gore belirlenir).
+ * Kap DOM'a eklenmis olmali; yukseklikler olculur.
  */
-function layoutCards(nodes) {
-  const grid = $('#grid');
-  grid.textContent = '';
-  lastColumnCount = columnCount();
-
+function layoutColumns(container, nodes) {
   const cols = Array.from({ length: lastColumnCount }, () => el('div', 'grid-col'));
-  grid.append(...cols);
+  container.append(...cols);
   const heights = cols.map(() => 0);
 
   for (const node of nodes) {
@@ -473,20 +517,66 @@ function layoutCards(nodes) {
   }
 }
 
+const appCount = (cards) => cards.reduce((n, c) => n + (c.kind === 'group' ? c.children.length : 1), 0);
+
+/** Bolum basligi + sutun kabi. Bos bolum yalnizca surukleme sirasinda birakma alani olarak gorunur. */
+function sectionNode(key, title, cards) {
+  const section = el('section', `section ${key}`);
+  if (!cards.length) section.classList.add('empty');
+
+  const head = el('div', 'section-head');
+  head.append(el('h2', 'section-title', title));
+  head.append(el('span', 'section-count', String(appCount(cards))));
+  section.append(head);
+
+  if (!cards.length) {
+    section.append(el('div', 'section-placeholder', key === 'favorites'
+      ? '★ Favorilere eklemek icin buraya birak'
+      : 'Favorilerden cikarmak icin buraya birak'));
+  }
+  const grid = el('div', 'section-grid');
+  section.append(grid);
+  bindSectionDrop(section, key === 'favorites');
+  return { section, grid };
+}
+
+function buildCardNode(card) {
+  const node = card.kind === 'group' ? buildGroupCard(card) : buildSingleCard(card);
+  makeCardDraggable(node, card);
+  return node;
+}
+
+let renderPending = false;
+
 function render() {
+  // Surukleme surerken DOM yenilenirse surukleme kopar; birakinca cizilir.
+  if (state.drag) {
+    renderPending = true;
+    return;
+  }
+  renderPending = false;
+
   const grid = $('#grid');
-  const cards = visibleCards();
+  const { favorites, others } = visibleSections();
+  const cards = [...favorites, ...others];
 
   const noProjects = state.projects.length === 0;
   $('#empty').classList.toggle('hidden', !noProjects);
   grid.classList.toggle('hidden', noProjects);
 
-  layoutCards(cards.map((card) =>
-    card.kind === 'group' ? buildGroupCard(card) : buildSingleCard(card)
-  ));
+  grid.textContent = '';
+  lastColumnCount = columnCount();
+  for (const [key, title, list] of [
+    ['favorites', '★ Favoriler', favorites],
+    ['others', 'Uygulamalar', others]
+  ]) {
+    const { section, grid: columns } = sectionNode(key, title, list);
+    grid.append(section);
+    layoutColumns(columns, list.map(buildCardNode));
+  }
 
   const runningCount = state.projects.filter((p) => isRunning(procOf(p.id).status)).length;
-  const shown = cards.reduce((n, c) => n + (c.kind === 'group' ? c.children.length : 1), 0);
+  const shown = appCount(cards);
 
   $('#subtitle').textContent =
     `${state.projects.length} proje bulundu · ${runningCount} calisiyor · ${shown} gosteriliyor`;
@@ -501,25 +591,227 @@ function render() {
 
 /* ------------------------- favori ve daraltma -------------------------- */
 
+function setOrderState(order) {
+  state.order = order;
+  state.orderIndex = new Map(order.map((id, i) => [id, i]));
+}
+
 function applyCardPrefs(cfg) {
   if (!cfg) return;
   state.favorites = new Set(cfg.favorites || []);
   state.collapsed = new Set(cfg.collapsed || []);
+  setOrderState(cfg.order || []);
 }
 
 async function loadCardPrefs() {
   applyCardPrefs(await guard(api.config.get()));
 }
 
-// Arayuz aninda guncellenir; main'in dondurdugu config ile tekrar esitlenir.
-async function toggleFavorite(key) {
-  if (state.favorites.has(key)) state.favorites.delete(key);
-  else state.favorites.add(key);
+/**
+ * Bir listenin (bolum ya da grup ici) yeni sirasini genel siraya yazar; diger listelerin
+ * kendi icindeki sirasi korunur, cunku yalnizca ayni listedeki ogeler karsilastirilir.
+ * Arayuz aninda guncellenir, sonra main'in dondurdugu config ile esitlenir.
+ * @param {string[]} ids listenin yeni sirasi
+ * @param {{keys: string[], favorite: boolean}|null} favoriteChange
+ */
+async function saveOrder(ids, favoriteChange = null) {
+  const moved = new Set(ids);
+  setOrderState([...state.order.filter((id) => !moved.has(id)), ...ids]);
+  if (favoriteChange) {
+    for (const key of favoriteChange.keys) {
+      if (favoriteChange.favorite) state.favorites.add(key);
+      else state.favorites.delete(key);
+    }
+  }
   render();
-  const cfg = await guard(api.config.toggleFavorite(key));
+
+  let cfg = await guard(api.config.setOrder(state.order));
+  if (cfg && favoriteChange) {
+    cfg = await guard(api.config.setFavorites(favoriteChange.keys, favoriteChange.favorite));
+  }
   if (cfg) applyCardPrefs(cfg);
   else await loadCardPrefs();
   render();
+}
+
+async function saveFavorites(keys, favorite) {
+  for (const key of keys) {
+    if (favorite) state.favorites.add(key);
+    else state.favorites.delete(key);
+  }
+  render();
+  const cfg = await guard(api.config.setFavorites(keys, favorite));
+  if (cfg) applyCardPrefs(cfg);
+  else await loadCardPrefs();
+  render();
+}
+
+/**
+ * Ust duzey karti bir bolumde hedef kartin onune/arkasina tasir. Bolum degisirse
+ * favori durumu da degisir (favoriden cikan grubun alt uygulamalari da cikar).
+ * @param {string|null} targetId null ise bolumun sonuna
+ */
+async function moveCard(dragId, targetId, after, toFavorites) {
+  const all = buildCards(false);
+  const dragged = all.find((c) => c.id === dragId);
+  if (!dragged) return;
+
+  const ids = all.filter((c) => c.id !== dragId && isFavoriteCard(c) === toFavorites).map((c) => c.id);
+  const at = targetId ? ids.indexOf(targetId) : -1;
+  ids.splice(at < 0 ? ids.length : at + (after ? 1 : 0), 0, dragId);
+
+  let favoriteChange = null;
+  if (isFavoriteCard(dragged) !== toFavorites) {
+    const keys = toFavorites ? [dragId] : [dragId, ...(dragged.members || []).map((p) => p.id)];
+    favoriteChange = { keys, favorite: toFavorites };
+  }
+  await saveOrder(ids, favoriteChange);
+}
+
+/** Grup icindeki bir uygulamayi ayni gruptaki hedefin onune/arkasina tasir. */
+async function moveChild(groupId, dragId, targetId, after) {
+  const group = buildCards(false).find((c) => c.id === groupId);
+  if (!group) return;
+  const ids = group.children.map((p) => p.id).filter((id) => id !== dragId);
+  const at = ids.indexOf(targetId);
+  ids.splice(at < 0 ? ids.length : at + (after ? 1 : 0), 0, dragId);
+  await saveOrder(ids.map(childOrderKey));
+}
+
+/** Yildiz: ust duzey kart bolum degistiriyorsa yeni bolumun sonuna gecer. */
+async function toggleFavorite(key) {
+  const favorite = !state.favorites.has(key);
+  const card = buildCards(false).find((c) => c.id === key);
+  if (card) {
+    const willBeFavorite = favorite ||
+      (card.kind === 'group' && card.members.some((p) => state.favorites.has(p.id)));
+    if (willBeFavorite !== isFavoriteCard(card)) {
+      await moveCard(key, null, false, willBeFavorite);
+      return;
+    }
+  }
+  await saveFavorites([key], favorite);
+}
+
+/* ---------------------------- surukle-birak ---------------------------- */
+
+function clearDropMarks() {
+  for (const node of document.querySelectorAll('.drop-before, .drop-after, .drop-end')) {
+    node.classList.remove('drop-before', 'drop-after', 'drop-end');
+  }
+}
+
+/** Fare hedefin alt yarisindaysa arkasina, ust yarisindaysa onune birakilir. */
+function isAfter(e, node) {
+  const rect = node.getBoundingClientRect();
+  return e.clientY > rect.top + rect.height / 2;
+}
+
+function markDrop(e, node) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+  const after = isAfter(e, node);
+  if (node.classList.contains(after ? 'drop-after' : 'drop-before')) return;
+  clearDropMarks();
+  node.classList.add(after ? 'drop-after' : 'drop-before');
+}
+
+function startDrag(e, info, node) {
+  state.drag = info;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', info.id);
+  // Surukleme goruntusu alindiktan sonra soluklastir.
+  requestAnimationFrame(() => {
+    node.classList.add('dragging');
+    document.body.classList.add(info.kind === 'card' ? 'dragging-card' : 'dragging-child');
+  });
+}
+
+function endDrag() {
+  state.drag = null;
+  clearDropMarks();
+  document.body.classList.remove('dragging-card', 'dragging-child');
+  for (const node of document.querySelectorAll('.dragging')) node.classList.remove('dragging');
+  if (renderPending) render();
+}
+
+function makeCardDraggable(node, card) {
+  node.draggable = true;
+  node.addEventListener('dragstart', (e) => {
+    if (e.target === node) startDrag(e, { kind: 'card', id: card.id }, node);
+  });
+  node.addEventListener('dragend', endDrag);
+  node.addEventListener('dragover', (e) => {
+    if (state.drag?.kind !== 'card') return;
+    if (state.drag.id === card.id) {
+      // kendi uzerine birakma bolum birakmasina donusmesin
+      e.stopPropagation();
+      clearDropMarks();
+      return;
+    }
+    markDrop(e, node);
+  });
+  node.addEventListener('drop', (e) => {
+    const drag = state.drag;
+    if (drag?.kind !== 'card' || drag.id === card.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const after = isAfter(e, node);
+    endDrag();
+    moveCard(drag.id, card.id, after, isFavoriteCard(card));
+  });
+}
+
+/** Grup icindeki uygulamalar yalnizca kendi gruplari icinde siralanir. */
+function makeChildDraggable(node, project) {
+  node.draggable = true;
+  const sameGroup = () => state.drag?.kind === 'child' && state.drag.groupId === project.groupId;
+  node.addEventListener('dragstart', (e) => {
+    e.stopPropagation();
+    startDrag(e, { kind: 'child', id: project.id, groupId: project.groupId }, node);
+  });
+  node.addEventListener('dragend', (e) => {
+    e.stopPropagation();
+    endDrag();
+  });
+  node.addEventListener('dragover', (e) => {
+    if (!sameGroup()) return;
+    if (state.drag.id === project.id) {
+      e.stopPropagation();
+      clearDropMarks();
+      return;
+    }
+    markDrop(e, node);
+  });
+  node.addEventListener('drop', (e) => {
+    const drag = state.drag;
+    if (!sameGroup() || drag.id === project.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const after = isAfter(e, node);
+    endDrag();
+    moveChild(project.groupId, drag.id, project.id, after);
+  });
+}
+
+/** Bolumun bos alanina birakilan kart o bolumun sonuna gecer. */
+function bindSectionDrop(section, favorites) {
+  section.addEventListener('dragover', (e) => {
+    if (state.drag?.kind !== 'card') return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (section.classList.contains('drop-end')) return;
+    clearDropMarks();
+    section.classList.add('drop-end');
+  });
+  section.addEventListener('drop', (e) => {
+    const drag = state.drag;
+    if (drag?.kind !== 'card') return;
+    e.preventDefault();
+    endDrag();
+    moveCard(drag.id, null, false, favorites);
+  });
 }
 
 async function setCollapsed(keys, collapsed) {

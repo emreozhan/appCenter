@@ -81,16 +81,43 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .btn.icon { padding: 6px 9px; }
 
 /* ------------------------------- grid ------------------------------- */
-/* Masonry: kartlar app.js tarafindan en kisa sutuna yerlestirilir,
-   boylece acik bir kartin yanindaki daraltilmis kartlar bosluk birakmaz. */
+/* Bolumler (Favoriler / Uygulamalar). Her bolumde masonry: kartlar app.js tarafindan
+   en kisa sutuna yerlestirilir, boylece farkli yukseklikteki kartlar bosluk birakmaz. */
 .grid {
   flex: 1;
   overflow-y: auto;
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 18px 20px 28px;
+  padding: 14px 20px 28px;
 }
+.section { margin-bottom: 18px; border-radius: 12px; }
+.section.empty { display: none; }
+body.dragging-card .section.empty { display: block; }
+
+.section-head { display: flex; align-items: center; gap: 10px; margin: 4px 2px 12px; }
+.section-head::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.section-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.section.favorites .section-title { color: var(--amber); }
+.section-count {
+  font-size: 11px;
+  color: var(--muted);
+  background: #262c3a;
+  border-radius: 999px;
+  padding: 0 8px;
+}
+.section-placeholder {
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+  padding: 22px;
+  text-align: center;
+  color: var(--muted);
+}
+.section-grid { display: flex; align-items: flex-start; gap: 14px; }
 .grid-col {
   flex: 1;
   min-width: 0;
@@ -181,7 +208,20 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .card.collapsed .card-title { font-size: 14px; }
 .card.collapsed .card-icon { font-size: 17px; }
 
-.card.favorite { box-shadow: inset 3px 0 0 var(--amber); }
+
+/* surukle-birak */
+.card > .card-head, .sub > .card-head { cursor: grab; }
+.card > .card-head button, .sub > .card-head button,
+.card-title.clickable { cursor: pointer; }
+.dragging { opacity: .35; }
+.drop-before { box-shadow: 0 -3px 0 0 var(--accent); }
+.drop-after { box-shadow: 0 3px 0 0 var(--accent); }
+.section.drop-end > .section-grid,
+.section.drop-end > .section-placeholder {
+  outline: 2px dashed var(--accent);
+  outline-offset: 5px;
+  border-radius: 12px;
+}
 
 /* grup karti ve icindeki uygulamalar */
 .sub-list { display: flex; flex-direction: column; gap: 8px; }

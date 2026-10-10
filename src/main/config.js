@@ -16,6 +16,8 @@ const DEFAULTS = {
   favorites: [],
   // daraltilmis kart kimlikleri
   collapsed: [],
+  // surukle-birak ile belirlenen sira (kart ve alt uygulama kimlikleri)
+  order: [],
   settings: {
     stopAllOnQuit: true
   }
@@ -46,6 +48,7 @@ function load() {
       hidden: Array.isArray(parsed.hidden) ? parsed.hidden : [],
       favorites: Array.isArray(parsed.favorites) ? parsed.favorites : [],
       collapsed: Array.isArray(parsed.collapsed) ? parsed.collapsed : [],
+      order: Array.isArray(parsed.order) ? parsed.order : [],
       roots: Array.isArray(parsed.roots) ? parsed.roots : []
     };
   } catch {
@@ -130,14 +133,28 @@ function isHidden(projectPath) {
 }
 
 /**
- * Kart kimligini favorilere ekler ya da cikarir.
- * @param {string} key normalize edilmis proje/grup yolu
+ * Kartlari favorilere ekler ya da cikarir.
+ * @param {string[]} keys normalize edilmis proje/grup yollari
+ * @param {boolean} favorite
  */
-function toggleFavorite(key) {
+function setFavorites(keys, favorite) {
   const cfg = load();
-  const idx = cfg.favorites.indexOf(key);
-  if (idx >= 0) cfg.favorites.splice(idx, 1);
-  else cfg.favorites.push(key);
+  const set = new Set(cfg.favorites);
+  for (const key of keys) {
+    if (favorite) set.add(key);
+    else set.delete(key);
+  }
+  cfg.favorites = [...set];
+  return save();
+}
+
+/**
+ * Surukle-birak sirasini kaydeder.
+ * @param {string[]} keys kart/alt uygulama kimlikleri, istenen sirada
+ */
+function setOrder(keys) {
+  const cfg = load();
+  cfg.order = [...new Set(keys)];
   return save();
 }
 
@@ -167,7 +184,8 @@ module.exports = {
   getOverride,
   toggleHidden,
   isHidden,
-  toggleFavorite,
+  setFavorites,
+  setOrder,
   setCollapsed,
   normalizeKey
 };

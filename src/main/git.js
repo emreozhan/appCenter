@@ -22,13 +22,58 @@ function findRepoRoot(dir) {
   }
 }
 
+function isFile(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * git.exe'nin tam yolunu arar. Uygulama Explorer'dan / oturum acilisinda
+ * baslatildiginda kalici PATH kullanilir; orada Git cogu zaman yanlis yazilmistir
+ * (ornek: "C:\Program Files\Git\git-bash.exe" ya da yalniz "C:\Program Files\Git").
+ * Bu girdilerin isaret ettigi kurulumun cmd\git.exe'si ve bilinen kurulum yerleri de denenir.
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {string|null}
+ */
+function findGit(env = process.env) {
+  if (process.platform !== 'win32') return null;
+  const candidates = [];
+  for (const raw of String(env.PATH || env.Path || '').split(path.delimiter)) {
+    const entry = raw.trim().replace(/"/g, '');
+    if (!entry) continue;
+    candidates.push(path.join(entry, 'git.exe'));
+    const base = /\.exe$/i.test(entry) ? path.dirname(entry) : entry;
+    candidates.push(path.join(base, 'cmd', 'git.exe'));
+  }
+  const roots = [
+    env.ProgramFiles,
+    env['ProgramFiles(x86)'],
+    env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Programs')
+  ];
+  for (const root of roots) {
+    if (root) candidates.push(path.join(root, 'Git', 'cmd', 'git.exe'));
+  }
+  return candidates.find(isFile) || null;
+}
+
+let gitBinary = null;
+
+/** Bulunan git yolunu onbellekler; bulunamazsa PATH'e birakir ve sonra tekrar dener. */
+function gitExecutable() {
+  if (!gitBinary) gitBinary = findGit();
+  return gitBinary || 'git';
+}
+
 /**
  * git'i shell olmadan calistirir; arguman dizisi sayesinde mesajlar kacis gerektirmez.
  * @returns {Promise<{ok: boolean, stdout: string, stderr: string}>}
  */
 function git(cwd, args, timeout = STATUS_TIMEOUT) {
   return new Promise((resolve) => {
-    execFile('git', args, {
+    execFile(gitExecutable(), args, {
       cwd,
       timeout,
       windowsHide: true,
@@ -40,7 +85,9 @@ function git(cwd, args, timeout = STATUS_TIMEOUT) {
       resolve({
         ok: !err,
         stdout: String(stdout || ''),
-        stderr: missing ? 'git bulunamadi (PATH icinde degil)' : String(stderr || (err && err.message) || '')
+        stderr: missing
+          ? 'git bulunamadi: Git for Windows kurulu degil ya da PATH ve bilinen kurulum yerlerinde yok'
+          : String(stderr || (err && err.message) || '')
       });
     });
   });
@@ -150,4 +197,4 @@ async function push(dir, log) {
   return res.ok ? { ok: true } : { ok: false, error: summary(res.stderr) || 'git push basarisiz' };
 }
 
-module.exports = { findRepoRoot, status, commit, push, parseStatus };
+module.exports = { findRepoRoot, findGit, status, commit, push, parseStatus };

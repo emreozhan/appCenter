@@ -12,6 +12,8 @@ const gitOps = require('../git');
 
 const GIT_CONCURRENCY = 6;
 const MAX_COMMIT_MESSAGE = 5000;
+const MAX_ORDER_KEYS = 5000;
+const MAX_KEY_LENGTH = 1024;
 
 /** fn'i ayni anda en fazla `limit` oge icin calistirir; sirayi korur. */
 async function mapLimit(items, limit, fn) {
@@ -126,9 +128,18 @@ function register(getWindow) {
     return reloadProject(id);
   });
 
-  ipcMain.handle(CH.CONFIG_TOGGLE_FAVORITE, (_e, key) => {
-    if (!isKnownCardKey(key)) throw new Error('Gecersiz kart kimligi');
-    return config.toggleFavorite(key);
+  ipcMain.handle(CH.CONFIG_SET_FAVORITES, (_e, keys, favorite) => {
+    if (!Array.isArray(keys) || keys.length > 1000) throw new Error('Gecersiz kart listesi');
+    return config.setFavorites(keys.filter(isKnownCardKey), favorite === true);
+  });
+
+  ipcMain.handle(CH.CONFIG_SET_ORDER, (_e, keys) => {
+    // Su an taranmamis (gecici olarak yok olan) projelerin sirasi da korunur;
+    // bu yuzden yalnizca bicim dogrulanir.
+    const valid = Array.isArray(keys) && keys.length <= MAX_ORDER_KEYS &&
+      keys.every((k) => typeof k === 'string' && k.length > 0 && k.length <= MAX_KEY_LENGTH);
+    if (!valid) throw new Error('Gecersiz siralama');
+    return config.setOrder(keys);
   });
 
   ipcMain.handle(CH.CONFIG_SET_COLLAPSED, (_e, keys, collapsed) => {
