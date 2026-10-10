@@ -6,6 +6,12 @@ It was built for a folder full of AI-generated side projects, each with its own 
 
 > The user interface is currently in Turkish.
 
+<p align="center">
+  <img src="docs/appcenter-tanitim.webp" alt="App Center intro clip: forty project folders, scattered commands and git states, then everything in one window" width="360">
+</p>
+
+*Intro clip (Turkish captions): the chaos of forty project folders – forgotten names, different start commands, busy ports, `cd` into long paths, `git status` in every repo – and App Center bringing them into a single window.*
+
 ## Features
 
 - **Project discovery** – scans the root folders you choose (up to 3 levels deep) and detects Electron, Vite, Next.js, Tauri, Node.js, Python, .NET/C#, Java (Maven/Gradle), Go, Rust, static HTML and plain `start.cmd`/`build.cmd` projects.
@@ -135,6 +141,8 @@ Security: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. T
 ---
 
 ## Türkçe özet
+
+Sayfanın başındaki tanıtım klibi (`docs/appcenter-tanitim.webp`) Türkçedir.
 
 App Center, verdiğin kök klasörlerdeki projeleri bulan; her biri için kurulum, build ve çalıştırma komutlarını üreten ve hepsini tek pencereden başlatıp durdurmanı sağlayan bir Electron masaüstü uygulamasıdır. Kartlarda git durumu görünür, commit ve push yapılabilir; favoriler, daraltılabilir kartlar ve iç içe projeler için grup kartları vardır. Arayüz Türkçedir.
 
